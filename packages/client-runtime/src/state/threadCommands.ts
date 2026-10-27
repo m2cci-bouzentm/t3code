@@ -27,6 +27,7 @@ import {
   type InterruptThreadTurnInput,
   type MarkThreadUnreadInput,
   type ForkThreadFromRunInput,
+  type DelegateTaskInput,
   type MergeThreadBackInput,
   type PromoteQueuedRunInput,
   type ResumeThreadQueueInput,
@@ -64,6 +65,7 @@ import {
   editQueuedRun,
   interruptThreadTurn,
   forkThreadFromRun,
+  delegateTask,
   markThreadUnread,
   mergeThreadBack,
   promoteQueuedRun,
@@ -111,6 +113,7 @@ export type {
   InterruptThreadTurnInput,
   MarkThreadUnreadInput,
   ForkThreadFromRunInput,
+  DelegateTaskInput,
   MergeThreadBackInput,
   PromoteQueuedRunInput,
   LinkThreadPullRequestInput,
@@ -377,6 +380,15 @@ export function createThreadEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "serial",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceThreadId]),
+      },
+    }),
+    delegateTask: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:delegate-task",
+      execute: (input: DelegateTaskInput) => delegateTask(input),
+      scheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.parentThreadId]),
       },
     }),
     mergeBack: createEnvironmentCommand(runtime, {

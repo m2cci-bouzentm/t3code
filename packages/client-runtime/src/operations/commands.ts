@@ -28,6 +28,7 @@ import {
   type UploadChatAttachment,
   type GuestMessageId,
 } from "@t3tools/contracts";
+import { derive as deriveOrchestrationId } from "@t3tools/provider-core/server/IdAllocator";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -217,6 +218,12 @@ export interface ForkThreadFromRunInput extends CommandMetadata {
   readonly targetThreadId: ThreadId;
   readonly runId: RunId;
   readonly title?: string;
+}
+
+export interface DelegateTaskInput extends CommandMetadata {
+  readonly parentThreadId: ThreadId;
+  readonly task: string;
+  readonly modelSelection: ModelSelection;
 }
 
 export interface MergeThreadBackInput extends CommandMetadata {
@@ -1031,6 +1038,32 @@ export const forkThreadFromRun = Effect.fn("EnvironmentCommands.forkThreadFromRu
     sourcePoint: { type: "run", runId: input.runId },
     ...(input.title === undefined ? {} : { title: input.title }),
   });
+});
+
+/** Starts a subagent of the parent's latest run, which may be finished, and returns the child thread id. */
+export const delegateTask = Effect.fn("EnvironmentCommands.delegateTask")(function* (
+  input: DelegateTaskInput,
+) {
+  const projection = yield* getProjection(input.parentThreadId);
+  const parentRun = projection.runs
+    .filter((run) => run.rootNodeId !== null)
+    .sort((left, right) => right.ordinal - left.ordinal)[0]!;
+  const commandId = yield* allocateCommandId(input);
+  yield* dispatch({
+    type: "delegated_task.request",
+    commandId,
+    createdBy: "user",
+    creationSource: input.creationSource ?? "web",
+    parentThreadId: input.parentThreadId,
+    parentRunId: parentRun.id,
+    parentNodeId: parentRun.rootNodeId!,
+    task: input.task,
+    modelSelection: input.modelSelection,
+    runtimeMode: projection.thread.runtimeMode,
+    interactionMode: projection.thread.interactionMode,
+    completionWake: "always",
+  });
+  return deriveOrchestrationId.delegatedTaskThread({ commandId });
 });
 
 export const mergeThreadBack = Effect.fn("EnvironmentCommands.mergeThreadBack")(function* (

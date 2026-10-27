@@ -243,6 +243,10 @@ layouts with an inspector, its thread opens beside the parent. Maximize it to
 fill the screen; close the full-screen view to return to the parent and inspector.
 Stop on a thread also stops the subagents it delegated to.
 
+On web and desktop, you can start a subagent yourself with **Sub agent** in the thread header.
+Pick its provider and model and write its task. Its thread opens, you can message it, and its result
+returns to the parent, also when the parent agent is idle.
+
 Subagent threads started by the agent can't take messages; message the parent
 thread instead. When such a subagent needs an approval or an answer, the parent
 thread asks for it.
