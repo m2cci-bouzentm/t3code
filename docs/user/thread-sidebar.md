@@ -243,7 +243,9 @@ layouts with an inspector, its thread opens beside the parent. Maximize it to
 fill the screen; close the full-screen view to return to the parent and inspector.
 Stop on a thread also stops the subagents it delegated to.
 
-Subagent threads started by the agent can't take messages; message the parent
+Agents start subagents as T3 threads, so you can message them. Claude can't use
+its own subagent tool in T3. A subagent a provider starts with its own tool (for
+example a Codex `spawn_agent` child) can't take messages; message the parent
 thread instead. When such a subagent needs an approval or an answer, the parent
 thread asks for it.
 
