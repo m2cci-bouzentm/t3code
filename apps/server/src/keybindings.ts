@@ -112,6 +112,16 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
       when: "composerFocus && draftThreadRoute",
     },
   },
+  {
+    id: "thread.previous:ctrl+pageup",
+    alongside: { key: "mod+shift+[", command: "thread.previous" },
+    rule: { key: "ctrl+pageup", command: "thread.previous" },
+  },
+  {
+    id: "thread.next:ctrl+pagedown",
+    alongside: { key: "mod+shift+]", command: "thread.next" },
+    rule: { key: "ctrl+pagedown", command: "thread.next" },
+  },
 ];
 
 function keybindingShortcutContext(rule: KeybindingRule): string | null {

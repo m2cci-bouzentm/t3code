@@ -1984,6 +1984,9 @@ const readClaudeLaunchArgSettings = Effect.fn("ClaudeAdapterV2.readLaunchArgSett
 
 export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__t3-code__*";
 
+// With T3 tools, subagents go through delegate_task: a native Agent child cannot take user messages.
+const CLAUDE_T3_MCP_DISALLOWED_TOOLS: ReadonlyArray<string> = ["Agent"];
+
 // Keep in sync with OrchestratorToolkit Tool.Readonly annotations; ClaudeAdapterV2.test.ts checks this.
 export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
   "mcp__t3-code__orchestrator_capabilities",
@@ -2014,6 +2017,7 @@ export function claudeMcpQueryOverrides(input: {
   readonly allowedTools?: ReadonlyArray<string>;
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
+  readonly disallowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
 } {
   const session = input.mcpSession;
@@ -2025,6 +2029,7 @@ export function claudeMcpQueryOverrides(input: {
     : [CLAUDE_T3_MCP_TOOL_WILDCARD];
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
+    disallowedTools: CLAUDE_T3_MCP_DISALLOWED_TOOLS,
     mcpServers: {
       "t3-code": {
         type: "http",
@@ -10938,6 +10943,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(mcpOverrides.allowedTools === undefined
               ? {}
               : { allowedTools: mcpOverrides.allowedTools }),
+            ...(mcpOverrides.disallowedTools === undefined
+              ? {}
+              : { disallowedTools: mcpOverrides.disallowedTools }),
             ...(mcpOverrides.mcpServers === undefined
               ? {}
               : { mcpServers: mcpOverrides.mcpServers }),

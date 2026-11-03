@@ -797,20 +797,13 @@ export function resolveAdjacentThreadId<T>(input: {
     return null;
   }
 
-  if (currentThreadId === null) {
-    return direction === "previous" ? (threadIds.at(-1) ?? null) : (threadIds[0] ?? null);
-  }
-
-  const currentIndex = threadIds.indexOf(currentThreadId);
+  const currentIndex = currentThreadId === null ? -1 : threadIds.indexOf(currentThreadId);
   if (currentIndex === -1) {
-    return null;
+    return direction === "previous" ? threadIds.at(-1)! : threadIds[0]!;
   }
 
-  if (direction === "previous") {
-    return currentIndex > 0 ? (threadIds[currentIndex - 1] ?? null) : null;
-  }
-
-  return currentIndex < threadIds.length - 1 ? (threadIds[currentIndex + 1] ?? null) : null;
+  const step = direction === "previous" ? -1 : 1;
+  return threadIds[(currentIndex + step + threadIds.length) % threadIds.length]!;
 }
 
 export type SidebarThreadStatus =

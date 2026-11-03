@@ -2881,7 +2881,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to window keydown for thread navigation shortcuts using the current thread list
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || isCommandPaletteOpen() || isModelPickerOpen()) {
+      if (event.defaultPrevented || isCommandPaletteOpen() || isModelPickerOpen()) {
         return;
       }
       const command = resolveShortcutCommand(event, keybindings, {
@@ -2914,6 +2914,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
         return;
       }
+      if (event.repeat) return;
       const jumpIndex = threadJumpIndexFromCommand(command ?? "");
       if (jumpIndex === null) return;
       navigateToThreadKey(orderedThreadKeys[jumpIndex] ?? null);

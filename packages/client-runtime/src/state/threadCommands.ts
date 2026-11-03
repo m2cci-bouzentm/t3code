@@ -29,6 +29,7 @@ import {
   interruptThreadTurn,
   forkSideChat,
   forkThreadFromRun,
+  delegateTask,
   markThreadUnread,
   mergeThreadBack,
   promoteQueuedRun,
@@ -315,6 +316,15 @@ export function createThreadEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "serial",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceThreadId]),
+      },
+    }),
+    delegateTask: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:delegate-task",
+      execute: delegateTask,
+      scheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.parentThreadId]),
       },
     }),
     mergeBack: createEnvironmentCommand(runtime, {

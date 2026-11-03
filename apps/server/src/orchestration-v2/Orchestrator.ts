@@ -7952,14 +7952,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const parentRun = parentProjection.runs.find(
         (candidate) => candidate.id === command.parentRunId,
       );
-      if (parentRun === undefined || !isActiveRun(parentRun)) {
+      // A user may attach a subagent to a finished run; an agent only to its own live run.
+      if (parentRun === undefined || (command.createdBy !== "user" && !isActiveRun(parentRun))) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
           cause: `Parent run ${command.parentRunId} is not active.`,
         });
       }
-      if (yield* stopReachedRun(command, command.parentThreadId, parentRun.id)) {
+      if (
+        isActiveRun(parentRun) &&
+        (yield* stopReachedRun(command, command.parentThreadId, parentRun.id))
+      ) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
@@ -7977,7 +7981,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
-          cause: `Parent node ${command.parentNodeId} is not part of active run ${parentRun.id}.`,
+          cause: `Parent node ${command.parentNodeId} is not part of run ${parentRun.id}.`,
         });
       }
 

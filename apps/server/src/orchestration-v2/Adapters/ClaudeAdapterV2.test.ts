@@ -564,6 +564,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS,
       ],
+      disallowedTools: ["Agent"],
       mcpServers: T3_MCP_SERVERS,
     });
     assert.isFalse(overrides.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD));
@@ -635,6 +636,7 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
     });
     assert.deepEqual(overrides, {
       allowedTools: ["Read", "mcp__t3-code__*"],
+      disallowedTools: ["Agent"],
       mcpServers: {
         "t3-code": {
           type: "http",
@@ -667,7 +669,7 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
     };
     assert.equal(systemPrompt.type, "preset");
     assert.equal(systemPrompt.preset, "claude_code");
-    assert.include(systemPrompt.append ?? "", "Use `delegate_task`");
+    assert.include(systemPrompt.append ?? "", "Subagents: always `delegate_task`");
     assert.include(systemPrompt.append ?? "", "call `t3_background_wait`");
     assert.notInclude(systemPrompt.append ?? "", "## T3 Code devices");
     const logged = ClaudeAdapterV2.loggedClaudeQueryOptions(options);
@@ -711,7 +713,7 @@ describe("ClaudeAdapterV2 device instructions", () => {
   it("gives a session with device access the device block and the ToolSearch line to load it", () => {
     const text = append({ mcp: true, deviceToolsAvailable: true });
     assert.include(text, T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH);
-    assert.include(text, "Use `delegate_task`");
+    assert.include(text, "Subagents: always `delegate_task`");
   });
 
   it("leaves the device block out without device access or without T3 tools", () => {
@@ -3819,6 +3821,59 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           ),
         ),
       ),
+  );
+
+  it.effect("blocks the native Agent tool only when the session has T3 tools", () =>
+    Effect.gen(function* () {
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+      const open = (withT3Tools: boolean) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const harness = yield* makeWakeHarness;
+            if (withT3Tools) {
+              yield* mcpSessions.set({
+                environmentId: EnvironmentId.make("environment-claude-agent-block"),
+                threadId: harness.threadId,
+                providerSessionId: "mcp-session-claude-agent-block",
+                providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+                endpoint: "http://127.0.0.1:43123/mcp",
+                authorizationHeader: "Bearer secret-claude-token",
+                browserToolsAvailable: true,
+              });
+            }
+            yield* harness.runtime.startTurn(
+              makeClaudeTestTurnInput({
+                threadId: harness.threadId,
+                providerThread: harness.providerThread,
+                now: yield* DateTime.now,
+                attemptId: RunAttemptId.make("attempt-claude-agent-block"),
+                text: "Review this change with a subagent.",
+                attachments: [],
+              }),
+            );
+            const openedOptions = harness.getOpenedOptions()!;
+            yield* mcpSessions.clear(harness.threadId);
+            return openedOptions;
+          }),
+        );
+
+      const withoutT3Tools = yield* open(false);
+      assert.isUndefined(withoutT3Tools.mcpServers);
+      assert.isUndefined(withoutT3Tools.disallowedTools);
+
+      const withT3Tools = yield* open(true);
+      assert.property(withT3Tools.mcpServers, "t3-code");
+      assert.deepEqual(withT3Tools.disallowedTools, ["Agent"]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
   );
 
   describe("Claude settings restrictions", () => {

@@ -127,7 +127,7 @@ const send = (threadId: ThreadId, text: string, type: "start_immediately" | "que
     });
   });
 
-const delegate = (parentThreadId: ThreadId, task: string) =>
+const delegate = (parentThreadId: ThreadId, task: string, createdBy: "agent" | "user" = "agent") =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const parentRun = (yield* orchestrator.getThreadProjection(parentThreadId)).runs.at(-1)!;
@@ -142,8 +142,8 @@ const delegate = (parentThreadId: ThreadId, task: string) =>
       runtimeMode: "full-access",
       interactionMode: "default",
       completionWake: "always",
-      createdBy: "agent",
-      creationSource: "mcp",
+      createdBy,
+      creationSource: createdBy === "agent" ? "mcp" : "web",
     });
     const projection = yield* orchestrator.getThreadProjection(parentThreadId);
     return projection.subagents.find((candidate) => candidate.prompt === task)!.childThreadId!;
@@ -954,6 +954,65 @@ it.effect("a run Stop reached cannot delegate or start a watch, even after it en
       });
     }
     assert.deepEqual((yield* threadState(threadId)).watched, [4]);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("a user can delegate from a finished or stopped run; an agent cannot", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const now = yield* DateTime.now;
+    for (const status of ["completed", "interrupted"] as const) {
+      const threadId = ThreadId.make(`thread:finished-parent:${status}`);
+      yield* createWatchingThread(threadId, 1);
+      yield* send(threadId, "work", "start_immediately");
+      const run = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!;
+      if (status === "interrupted") {
+        yield* projections.apply({
+          id: EventId.make(`event:finished-parent:${status}:interrupt-request`),
+          type: "turn-item.updated",
+          threadId,
+          runId: run.id,
+          occurredAt: now,
+          payload: {
+            id: TurnItemId.make(`turn-item:finished-parent:${status}:interrupt-request`),
+            threadId,
+            runId: run.id,
+            nodeId: run.rootNodeId!,
+            providerThreadId: run.providerThreadId!,
+            providerTurnId: null,
+            nativeItemRef: null,
+            parentItemId: null,
+            ordinal: 1_000,
+            status: "completed",
+            title: "Interrupt requested",
+            startedAt: now,
+            completedAt: now,
+            updatedAt: now,
+            type: "run_interrupt_request",
+            message: "Stop",
+          },
+        });
+      }
+      yield* projections.apply({
+        id: EventId.make(`event:finished-parent:${status}`),
+        type: "run.updated",
+        threadId,
+        runId: run.id,
+        occurredAt: now,
+        payload: { ...run, status, startedAt: now, completedAt: now },
+      });
+
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(delegate(threadId, `agent ${status}`))));
+      const childThreadId = yield* delegate(threadId, `user ${status}`, "user");
+      const child = yield* orchestrator.getThreadProjection(childThreadId);
+      assert.deepEqual(child.thread.lineage, {
+        parentThreadId: threadId,
+        relationshipToParent: "subagent",
+        rootThreadId: threadId,
+      });
+      assert.strictEqual(child.runs.length, 1);
+    }
   }).pipe(Effect.provide(layerTest)),
 );
 
