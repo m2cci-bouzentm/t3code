@@ -48,8 +48,9 @@ describe("useThreadJumpHintsVisible", () => {
     await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
 
     await screen.rerender(<JumpHints held={false} />);
-    await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");
+    await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
     await act(() => vi.advanceTimersByTime(1_000));
+    await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");
 
     await screen.rerender(<JumpHints held />);
     await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");

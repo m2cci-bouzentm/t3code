@@ -61,6 +61,7 @@ export function shouldNavigateAfterThreadPark(input: {
 }
 
 const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
+const THREAD_JUMP_HINT_RELEASE_GRACE_MS = 300;
 
 export function resolveSidebarRowAccessibility(input: {
   readonly title: string;
@@ -673,17 +674,36 @@ type ThreadStatusInput = Pick<
 
 /**
  * Thread jump hints appear once the jump modifier has been held for a moment,
- * so a quick shortcut never flashes them, and hide as soon as it is released.
+ * so a quick shortcut never flashes them. Shown hints outlast a short release,
+ * so a key remapper that lifts the modifier while it sends its own key does not
+ * hide them; a release before they show hides them at once.
  */
 export function useThreadJumpHintsVisible(shouldShow: boolean): boolean {
   const [showAt, setShowAt] = React.useState<number | null>(null);
-  // The clock is read inside the updater: the compiler caches a bare clock read
+  const [hideAt, setHideAt] = React.useState<number | null>(null);
+  const shown = useDeadlinePassed(showAt);
+  const releaseGraceOver = useDeadlinePassed(hideAt);
+  const isHeld = showAt !== null && hideAt === null;
+  // The clock is read inside the updaters: the compiler caches a bare clock read
   // in render once per instance, so a second hold would reuse the first deadline.
   // React discards this render and re-runs with the update.
-  if (shouldShow !== (showAt !== null)) {
-    setShowAt(shouldShow ? () => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS) : null);
+  if (shouldShow && showAt === null) {
+    setShowAt(() => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS));
   }
-  return useDeadlinePassed(showAt);
+  if (shouldShow && hideAt !== null) {
+    setHideAt(null);
+  }
+  if (!shouldShow && isHeld && shown) {
+    setHideAt(() => deadlineAfter(THREAD_JUMP_HINT_RELEASE_GRACE_MS));
+  }
+  if (!shouldShow && isHeld && !shown) {
+    setShowAt(null);
+  }
+  if (!shouldShow && releaseGraceOver) {
+    setShowAt(null);
+    setHideAt(null);
+  }
+  return shown && !releaseGraceOver;
 }
 
 export function resolveThreadLastVisitedAt(
