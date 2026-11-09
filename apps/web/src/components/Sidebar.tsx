@@ -1061,6 +1061,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     action: SidebarSweepAction;
     keys: ReadonlySet<string>;
   } | null>(null);
+  const [threadTraversalCount, setThreadTraversalCount] = useState(0);
   const snoozingThreadKeysRef = useRef(new Set<string>());
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const shortcutModifiers = useShortcutModifierState();
@@ -2913,6 +2914,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             direction: traversalDirection,
           }),
         );
+        setThreadTraversalCount((count) => count + 1);
         return;
       }
       if (event.repeat) return;
@@ -2945,7 +2947,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       },
     },
   );
-  const showJumpHints = useThreadJumpHintsVisible(shouldShowJumpHintsNow);
+  const showJumpHints = useThreadJumpHintsVisible(shouldShowJumpHintsNow, threadTraversalCount);
 
   const handleNewThreadClick = (event?: ReactMouseEvent) => {
     if (

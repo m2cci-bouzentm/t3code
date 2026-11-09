@@ -62,6 +62,7 @@ export function shouldNavigateAfterThreadPark(input: {
 
 const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
 const THREAD_JUMP_HINT_RELEASE_GRACE_MS = 300;
+const THREAD_JUMP_HINT_TRAVERSAL_HOLD_MS = 1_000;
 
 export function resolveSidebarRowAccessibility(input: {
   readonly title: string;
@@ -675,35 +676,45 @@ type ThreadStatusInput = Pick<
 /**
  * Thread jump hints appear once the jump modifier has been held for a moment,
  * so a quick shortcut never flashes them. Shown hints outlast a short release,
- * so a key remapper that lifts the modifier while it sends its own key does not
- * hide them; a release before they show hides them at once.
+ * and each thread traversal keeps them a while longer: a key remapper that sends
+ * the traversal key lifts the modifier for as long as its key is held. A release
+ * before the hints show hides them at once.
  */
-export function useThreadJumpHintsVisible(shouldShow: boolean): boolean {
+export function useThreadJumpHintsVisible(shouldShow: boolean, traversalCount: number): boolean {
   const [showAt, setShowAt] = React.useState<number | null>(null);
   const [hideAt, setHideAt] = React.useState<number | null>(null);
+  const [seenTraversalCount, setSeenTraversalCount] = React.useState(traversalCount);
   const shown = useDeadlinePassed(showAt);
-  const releaseGraceOver = useDeadlinePassed(hideAt);
+  const hideDeadlinePassed = useDeadlinePassed(hideAt);
+  const visible = shown && !hideDeadlinePassed;
   const isHeld = showAt !== null && hideAt === null;
+  const isNewTraversal = traversalCount !== seenTraversalCount;
+  if (isNewTraversal) {
+    setSeenTraversalCount(traversalCount);
+  }
   // The clock is read inside the updaters: the compiler caches a bare clock read
   // in render once per instance, so a second hold would reuse the first deadline.
   // React discards this render and re-runs with the update.
-  if (shouldShow && showAt === null) {
-    setShowAt(() => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS));
+  if (shouldShow) {
+    if (showAt === null) setShowAt(() => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS));
+    if (hideAt !== null) setHideAt(null);
+    return visible;
   }
-  if (shouldShow && hideAt !== null) {
-    setHideAt(null);
+  if (isNewTraversal && visible) {
+    setHideAt(() => deadlineAfter(THREAD_JUMP_HINT_TRAVERSAL_HOLD_MS));
+    return visible;
   }
-  if (!shouldShow && isHeld && shown) {
+  if (isHeld && shown) {
     setHideAt(() => deadlineAfter(THREAD_JUMP_HINT_RELEASE_GRACE_MS));
   }
-  if (!shouldShow && isHeld && !shown) {
+  if (isHeld && !shown) {
     setShowAt(null);
   }
-  if (!shouldShow && releaseGraceOver) {
+  if (hideDeadlinePassed) {
     setShowAt(null);
     setHideAt(null);
   }
-  return shown && !releaseGraceOver;
+  return visible;
 }
 
 export function resolveThreadLastVisitedAt(

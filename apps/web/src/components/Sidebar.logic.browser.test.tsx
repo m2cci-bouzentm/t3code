@@ -33,7 +33,7 @@ describe("useSnoozeWakeClock", () => {
 });
 
 function JumpHints(props: { readonly held: boolean }) {
-  return <output>{useThreadJumpHintsVisible(props.held) ? "shown" : "hidden"}</output>;
+  return <output>{useThreadJumpHintsVisible(props.held, 0) ? "shown" : "hidden"}</output>;
 }
 
 describe("useThreadJumpHintsVisible", () => {
