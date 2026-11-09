@@ -57,6 +57,7 @@ import {
   AuthOrchestrationOperateScope,
   ProjectId,
   type ScopedThreadRef,
+  THREAD_JUMP_KEYBINDING_COMMANDS,
   type ThreadId,
 } from "@t3tools/contracts";
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
@@ -93,7 +94,6 @@ import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
   shouldShowThreadJumpHintsForModifiers,
-  threadJumpCommandForIndex,
   threadJumpIndexFromCommand,
   threadTraversalDirectionFromCommand,
 } from "../keybindings";
@@ -193,6 +193,7 @@ import {
   planSidebarThreadDrop,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
+  resolveThreadJumpTargetId,
   resolveSidebarSweepKeys,
   resolveSidebarDropTarget,
   resolveSidebarDropVerb,
@@ -1427,9 +1428,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
 
   const jumpLabelByKey = (() => {
     const mapping = new Map<string, string>();
-    for (const [index, threadKey] of orderedThreadKeys.entries()) {
-      const jumpCommand = threadJumpCommandForIndex(index);
-      if (!jumpCommand) break;
+    for (const [jumpIndex, jumpCommand] of THREAD_JUMP_KEYBINDING_COMMANDS.entries()) {
+      const threadKey = resolveThreadJumpTargetId(orderedThreadKeys, jumpIndex);
+      if (threadKey === null || mapping.has(threadKey)) continue;
       const label = shortcutLabelForCommand(keybindings, jumpCommand);
       if (label) mapping.set(threadKey, label);
     }
@@ -2917,7 +2918,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       if (event.repeat) return;
       const jumpIndex = threadJumpIndexFromCommand(command ?? "");
       if (jumpIndex === null) return;
-      navigateToThreadKey(orderedThreadKeys[jumpIndex] ?? null);
+      navigateToThreadKey(resolveThreadJumpTargetId(orderedThreadKeys, jumpIndex));
     };
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);

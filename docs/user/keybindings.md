@@ -128,8 +128,9 @@ the keyboard. `isWeb` is true in a browser tab. `isDesktop` is true in the
 desktop app. `isInstalledApp` is true in the desktop app and in the web app
 installed in its own window. Unknown keys evaluate to `false`.
 
-`mod+1` through `mod+9` jump to the first nine threads, and to models while the
-model picker is open. The thread jumps do not run while the model picker is open.
+`mod+1` through `mod+8` jump to the first eight threads and `mod+9` to the last
+thread, as browser tabs do. While the model picker is open, `mod+1` through
+`mod+9` jump to models instead, and the thread jumps do not run.
 Those defaults use `isInstalledApp` so they do not steal the
 browser's tab-switch shortcuts. Remove that condition in Settings if you want
 the same jumps in a browser tab.

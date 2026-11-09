@@ -21,6 +21,7 @@ import {
   type ContextMenuItem,
   type EnvironmentId,
   type ThreadId,
+  THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import type { AsyncResult } from "effect/reactivity";
@@ -804,6 +805,12 @@ export function resolveAdjacentThreadId<T>(input: {
 
   const step = direction === "previous" ? -1 : 1;
   return threadIds[(currentIndex + step + threadIds.length) % threadIds.length]!;
+}
+
+export function resolveThreadJumpTargetId<T>(threadIds: readonly T[], jumpIndex: number): T | null {
+  const isLastJump = jumpIndex === THREAD_JUMP_KEYBINDING_COMMANDS.length - 1;
+  const targetIndex = isLastJump ? threadIds.length - 1 : jumpIndex;
+  return threadIds[targetIndex] ?? null;
 }
 
 export type SidebarThreadStatus =
