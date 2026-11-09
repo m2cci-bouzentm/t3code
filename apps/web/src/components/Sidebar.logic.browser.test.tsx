@@ -32,29 +32,47 @@ describe("useSnoozeWakeClock", () => {
   });
 });
 
-function JumpHints(props: { readonly held: boolean }) {
-  return <output>{useThreadJumpHintsVisible(props.held, 0) ? "shown" : "hidden"}</output>;
+function JumpHints(props: { readonly held: boolean; readonly otherModifierHeld: boolean }) {
+  const isAnyModifierHeld = props.held || props.otherModifierHeld;
+  return (
+    <output>{useThreadJumpHintsVisible(props.held, isAnyModifierHeld) ? "shown" : "hidden"}</output>
+  );
 }
 
 describe("useThreadJumpHintsVisible", () => {
   it("waits for the delay again on a second hold", async () => {
     // The first render reads the clock.
     using _timers = fakeTimers({ now: 0 });
-    await using screen = await render(<JumpHints held />, {
+    await using screen = await render(<JumpHints held otherModifierHeld={false} />, {
       // A bare hook host; nothing here links or navigates.
       router: false,
     });
     await act(() => vi.advanceTimersByTime(1_000));
     await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
 
-    await screen.rerender(<JumpHints held={false} />);
-    await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
-    await act(() => vi.advanceTimersByTime(1_000));
+    await screen.rerender(<JumpHints held={false} otherModifierHeld={false} />);
     await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");
+    await act(() => vi.advanceTimersByTime(1_000));
 
-    await screen.rerender(<JumpHints held />);
+    await screen.rerender(<JumpHints held otherModifierHeld={false} />);
     await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");
     await act(() => vi.advanceTimersByTime(1_000));
     await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
+  });
+
+  it("stays shown while a remapper swaps the jump modifier for another held one", async () => {
+    using _timers = fakeTimers({ now: 0 });
+    await using screen = await render(<JumpHints held otherModifierHeld={false} />, {
+      // A bare hook host; nothing here links or navigates.
+      router: false,
+    });
+    await act(() => vi.advanceTimersByTime(1_000));
+
+    await screen.rerender(<JumpHints held={false} otherModifierHeld />);
+    await act(() => vi.advanceTimersByTime(5_000));
+    await expect.element(screen.getByRole("status")).toHaveTextContent("shown");
+
+    await screen.rerender(<JumpHints held={false} otherModifierHeld={false} />);
+    await expect.element(screen.getByRole("status")).toHaveTextContent("hidden");
   });
 });

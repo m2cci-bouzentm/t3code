@@ -61,8 +61,6 @@ export function shouldNavigateAfterThreadPark(input: {
 }
 
 const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
-const THREAD_JUMP_HINT_RELEASE_GRACE_MS = 300;
-const THREAD_JUMP_HINT_TRAVERSAL_HOLD_MS = 1_000;
 
 export function resolveSidebarRowAccessibility(input: {
   readonly title: string;
@@ -675,44 +673,22 @@ type ThreadStatusInput = Pick<
 
 /**
  * Thread jump hints appear once the jump modifier has been held for a moment,
- * so a quick shortcut never flashes them. Shown hints outlast a short release,
- * and each thread traversal keeps them a while longer: a key remapper that sends
- * the traversal key lifts the modifier for as long as its key is held. A release
- * before the hints show hides them at once.
+ * so a quick shortcut never flashes them, and hide when every modifier is up.
+ * Shown hints stay while any modifier stays held: a key remapper can swap the
+ * held jump modifier for another one mid-hold.
  */
-export function useThreadJumpHintsVisible(shouldShow: boolean, traversalCount: number): boolean {
+export function useThreadJumpHintsVisible(
+  shouldShow: boolean,
+  isAnyModifierHeld: boolean,
+): boolean {
   const [showAt, setShowAt] = React.useState<number | null>(null);
-  const [hideAt, setHideAt] = React.useState<number | null>(null);
-  const [seenTraversalCount, setSeenTraversalCount] = React.useState(traversalCount);
-  const shown = useDeadlinePassed(showAt);
-  const hideDeadlinePassed = useDeadlinePassed(hideAt);
-  const visible = shown && !hideDeadlinePassed;
-  const isHeld = showAt !== null && hideAt === null;
-  const isNewTraversal = traversalCount !== seenTraversalCount;
-  if (isNewTraversal) {
-    setSeenTraversalCount(traversalCount);
-  }
-  // The clock is read inside the updaters: the compiler caches a bare clock read
+  const visible = useDeadlinePassed(showAt);
+  const isArmed = shouldShow || (visible && isAnyModifierHeld);
+  // The clock is read inside the updater: the compiler caches a bare clock read
   // in render once per instance, so a second hold would reuse the first deadline.
   // React discards this render and re-runs with the update.
-  if (shouldShow) {
-    if (showAt === null) setShowAt(() => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS));
-    if (hideAt !== null) setHideAt(null);
-    return visible;
-  }
-  if (isNewTraversal && visible) {
-    setHideAt(() => deadlineAfter(THREAD_JUMP_HINT_TRAVERSAL_HOLD_MS));
-    return visible;
-  }
-  if (isHeld && shown) {
-    setHideAt(() => deadlineAfter(THREAD_JUMP_HINT_RELEASE_GRACE_MS));
-  }
-  if (isHeld && !shown) {
-    setShowAt(null);
-  }
-  if (hideDeadlinePassed) {
-    setShowAt(null);
-    setHideAt(null);
+  if (isArmed !== (showAt !== null)) {
+    setShowAt(isArmed ? () => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS) : null);
   }
   return visible;
 }
