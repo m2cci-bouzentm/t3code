@@ -361,18 +361,18 @@ describe("thread navigation helpers", () => {
     );
   });
 
-  it("keeps default thread jumps off the web so the browser can switch tabs", () => {
+  it("keeps default thread jumps off browser tabs so the browser can switch tabs", () => {
     const input = event({ key: "1", metaKey: true });
     assert.isNull(
       resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
-        context: { isDesktop: false },
+        context: { isInstalledApp: false },
       }),
     );
     assert.strictEqual(
       resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
-        context: { isDesktop: true },
+        context: { isInstalledApp: true },
       }),
       "thread.jump.1",
     );
@@ -382,7 +382,7 @@ describe("thread navigation helpers", () => {
         DEFAULT_RESOLVED_KEYBINDINGS,
         {
           platform: "MacIntel",
-          context: { isDesktop: false },
+          context: { isInstalledApp: false },
         },
       ),
     );
@@ -392,7 +392,7 @@ describe("thread navigation helpers", () => {
         DEFAULT_RESOLVED_KEYBINDINGS,
         {
           platform: "MacIntel",
-          context: { isDesktop: true },
+          context: { isInstalledApp: true },
         },
       ),
     );
@@ -400,25 +400,25 @@ describe("thread navigation helpers", () => {
 });
 
 describe("model picker navigation helpers", () => {
-  it("keeps default model jumps off the web even while the picker is open", () => {
+  it("keeps default model jumps off browser tabs even while the picker is open", () => {
     const input = event({ key: "3", metaKey: true });
     assert.isNull(
       resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
-        context: { isDesktop: false, modelPickerOpen: true },
+        context: { isInstalledApp: false, modelPickerOpen: true },
       }),
     );
     assert.strictEqual(
       resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
-        context: { isDesktop: true, modelPickerOpen: true },
+        context: { isInstalledApp: true, modelPickerOpen: true },
       }),
       "modelPicker.jump.3",
     );
     assert.strictEqual(
       resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
-        context: { isDesktop: true, modelPickerOpen: false },
+        context: { isInstalledApp: true, modelPickerOpen: false },
       }),
       "thread.jump.3",
     );
@@ -908,14 +908,14 @@ describe("Usage shortcuts", () => {
       assert.strictEqual(
         resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
           platform,
-          context: { usagePageOpen: true, isDesktop: true },
+          context: { usagePageOpen: true, isInstalledApp: true },
         }),
         "thread.jump.2",
       );
       assert.isNotNull(
         shortcutLabelForCommand(DEFAULT_RESOLVED_KEYBINDINGS, "thread.jump.2", {
           platform,
-          context: { usagePageOpen: true, isDesktop: true },
+          context: { usagePageOpen: true, isInstalledApp: true },
         }),
       );
     },

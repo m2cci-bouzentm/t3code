@@ -130,7 +130,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
-import { isElectron } from "../env";
+import { isElectron, isInstalledApp } from "../env";
 import { useDiffPanelStore } from "../diffPanelStore";
 import { useActiveThreadRef } from "../hooks/useActiveThreadRef";
 import { composerRequiresModifier } from "../composer-logic";
@@ -2703,6 +2703,7 @@ export default function ChatView(props: ChatViewProps) {
     composerRequiresModifier: composerRequiresModifier(settings.sendShortcut, promptRef.current),
     isWeb: !isElectron,
     isDesktop: isElectron,
+    isInstalledApp,
   });
   const getShortcutContextStable = useStableCallback(getShortcutContext);
   const timelineSkills = activeProviderStatus

@@ -15,6 +15,7 @@ const shortcutContext = {
   previewOpen: false,
   isWeb: true,
   isDesktop: false,
+  isInstalledApp: false,
   modelPickerOpen: false,
 };
 

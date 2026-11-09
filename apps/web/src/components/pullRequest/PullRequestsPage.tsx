@@ -80,7 +80,7 @@ import { type PullRequestRowTarget } from "./PullRequestRow";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { isCommandPaletteOpen } from "~/commandPaletteBus";
-import { isElectron } from "~/env";
+import { isElectron, isInstalledApp } from "~/env";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "~/keybindings";
 import { registerCommands } from "~/shortcuts/dispatcher";
 import { isTerminalFocused } from "~/lib/terminalFocus";
@@ -125,6 +125,7 @@ function getShortcutContext() {
     modelPickerOpen: false,
     isWeb: !isElectron,
     isDesktop: isElectron,
+    isInstalledApp,
   };
 }
 
