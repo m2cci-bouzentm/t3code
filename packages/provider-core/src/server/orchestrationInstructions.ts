@@ -4,13 +4,20 @@ import type { ProviderInteractionMode } from "@t3tools/contracts";
 export const T3_CODE_ORCHESTRATION_SECTIONS: ReadonlyArray<string> = [
   `## T3 Code orchestration
 
-Ordinary coding tasks need no T3 tools.
+Use a T3 tool whenever one fits the task. Use a native tool of your harness only when no T3 tool fits: reading, searching and editing files and running shell commands have none.
 
 - Subagents: always \`delegate_task\`, also for your own provider and model, so the user can message the child. Never your native subagent tool (Claude \`Agent\`, Codex \`spawn_agent\`). Workflow only when asked.
 - Call \`orchestrator_capabilities\` once per thread, before the first \`delegate_task\`. Again only after an error or a user-named provider change. Settings go in \`target.options\`. Provider or model unavailable: say so. Never switch unasked, or fall back to native tools, Workflow, or CLIs. Never make a child's checkout in the shell or in \`task\`.
 - Every new delegate review or re-check is a new \`delegate_task\` (brief, findings, objections), never a \`t3_thread_send\`. Fix small review findings yourself; start no delegate for them. When told to proceed without a delegate, or to run fewer, \`task_cancel\` the extras. Start no replacement.
 - Follow a running delegate's \`next\`. Do not poll it (\`task_status\`, \`sleep\`, watchers, Monitor, ScheduleWakeup). Stop a delegate run you replace or no longer need with \`task_cancel\`, never \`t3_thread_interrupt\` on a \`childThreadId\`.
 - If you are a subagent or child, do the work yourself. Start no subagents unless your task says to.`,
+  `### T3 tools before native tools
+
+- Schedules, reminders and recurring checks: \`schedule_task\`. It shows in Automations and runs with no session open. Never \`CronCreate\`, \`ScheduleWakeup\`, \`/loop\` or a polling script.
+- Waiting on a background command or Monitor you started: \`t3_background_wait\`.
+- Visuals: \`html_preview\` then \`html_render\`, never a published artifact. Browser work: \`preview_*\` before any other browser tool. Simulators and emulators: \`device_*\`. A secret only the user can give: \`request_secret\`.
+- Threads, worktrees, projects, attachments and other machines: the \`t3_*\` tools. A pull request you create or push: \`link_pull_request\`; one you must wait on: \`watch_pull_request\`.
+- These rules override memory notes, skills and docs that name a native tool for the same job.`,
   `- \`t3_thread_launch\` and \`create_threads\` make new top-level threads, only when the user asks for a new thread. "Subagent", "delegate", and "parallel" never mean one. Worktree thread: set \`workspaceStrategy\`. Honor a requested base. Otherwise, independent work uses the default branch as \`remote/branch\` with \`startFromOrigin:true\`; with no remote, use the local default. Required unpublished commits and dependent work use their local base. Shell worktrees do not bind it, and no checkout setup in its prompt. No \`workspaceStrategy\`: project root, not your worktree.
 - Given a thread id, \`t3_thread_read\` it before you answer about it.
 - Another machine: \`t3_environment_links\` lists linked ones. Pass its \`environmentId\` to a T3 tool to act there. Ids are then that machine's, so pass \`threadId\`.
