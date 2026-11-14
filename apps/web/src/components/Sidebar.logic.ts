@@ -20,6 +20,8 @@ import {
   isListedThreadLineage,
   type ContextMenuItem,
   type EnvironmentId,
+  type ResolvedKeybindingsConfig,
+  type ScopedThreadRef,
   type ThreadId,
   THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
@@ -39,10 +41,19 @@ import {
 import type { SidebarThreadSummary, Thread } from "../types";
 import { normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
+import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
 import { observeIntersection } from "../lib/observeIntersection";
-import { deadlineAfter, deadlineStore } from "@t3tools/client-runtime/clock";
+import { deadlineAfter, deadlineStore, type ClockStore } from "@t3tools/client-runtime/clock";
 import { useDeadlinePassed } from "../hooks/useDeadline";
 import { legacyProjectCwdPreferenceKey } from "../uiStateStore";
+import { isElectron } from "../env";
+import { shouldShowThreadJumpHintsForModifiers } from "../keybindings";
+import { isTerminalFocused, subscribeToTerminalFocusChanges } from "../lib/terminalFocus";
+import { isPreviewFocused } from "../lib/previewFocus";
+import { isModelPickerOpen, subscribeToModelPickerVisibility } from "../modelPickerVisibility";
+import { type ShortcutModifierState, shortcutModifierStore } from "../shortcutModifierState";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;
@@ -60,7 +71,7 @@ export function shouldNavigateAfterThreadPark(input: {
   );
 }
 
-const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
+export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
 
 export function resolveSidebarRowAccessibility(input: {
   readonly title: string;
@@ -152,6 +163,13 @@ export function useSnoozeWakeClock(
     return nextClockMs;
   }
   return clockMs;
+}
+
+// Live status that says the cwd is not a repository means the checkout was removed.
+export function withoutRemovedCheckout<
+  T extends { readonly branch: string | null; readonly worktreePath: string | null },
+>(thread: T, gitStatus: { readonly isRepo?: boolean | undefined } | null): T {
+  return gitStatus?.isRepo === false ? { ...thread, branch: null, worktreePath: null } : thread;
 }
 
 export function useRetainedValue<T>(key: string | null, value: T | null): T | null {
@@ -671,26 +689,134 @@ type ThreadStatusInput = Pick<
   blockedOnThreadWait?: boolean | undefined;
 };
 
+// Read at event time: subscribing Sidebar to terminal or modifier state re-renders every row.
+export function threadShortcutContext(routeThreadRef: ScopedThreadRef | null) {
+  return {
+    terminalFocus: isTerminalFocused(),
+    terminalOpen:
+      routeThreadRef !== null &&
+      selectThreadTerminalUiState(
+        useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+        routeThreadRef,
+      ).terminalOpen,
+    previewFocus: isPreviewFocused(),
+    previewOpen:
+      selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, routeThreadRef) ===
+      "preview",
+    modelPickerOpen: isModelPickerOpen(),
+    isWeb: !isElectron,
+    isDesktop: isElectron,
+  };
+}
+
+/** Whether the current modifier combination, including none, has been held unchanged for `delayMs`. */
+function createModifierHoldStore(delayMs: number): ClockStore<boolean> {
+  const listeners = new Set<() => void>();
+  let held = false;
+  let stopDeadline = () => {};
+  let stopModifiers: (() => void) | null = null;
+
+  const setHeld = (next: boolean) => {
+    if (held === next) return;
+    held = next;
+    for (const listener of listeners) listener();
+  };
+  const onModifiersChange = () => {
+    stopDeadline();
+    const deadline = deadlineStore(deadlineAfter(delayMs));
+    stopDeadline = deadline.subscribe(() => setHeld(true));
+    // A deadline another subscriber already passed never notifies a late joiner.
+    setHeld(deadline.getSnapshot());
+  };
+
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      if (stopModifiers === null) {
+        stopModifiers = shortcutModifierStore.subscribe(onModifiersChange);
+        onModifiersChange();
+      }
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size > 0) return;
+        stopModifiers?.();
+        stopModifiers = null;
+        stopDeadline();
+        stopDeadline = () => {};
+        held = false;
+      };
+    },
+    getSnapshot: () => held,
+  };
+}
+
+const threadJumpModifierHold = createModifierHoldStore(THREAD_JUMP_HINT_SHOW_DELAY_MS);
+
+function subscribeToThreadJumpHintInputs(listener: () => void): () => void {
+  const unsubscribeHold = threadJumpModifierHold.subscribe(listener);
+  const unsubscribeFocus = subscribeToTerminalFocusChanges(listener);
+  const unsubscribeTerminals = useTerminalUiStateStore.subscribe(listener);
+  const unsubscribeRightPanels = useRightPanelStore.subscribe(listener);
+  const unsubscribeModelPicker = subscribeToModelPickerVisibility(listener);
+  return () => {
+    unsubscribeHold();
+    unsubscribeFocus();
+    unsubscribeTerminals();
+    unsubscribeRightPanels();
+    unsubscribeModelPicker();
+  };
+}
+
+function isAnyShortcutModifierHeld(modifiers: ShortcutModifierState): boolean {
+  return modifiers.metaKey || modifiers.ctrlKey || modifiers.altKey || modifiers.shiftKey;
+}
+
+function subscribeToShownThreadJumpHintInputs(listener: () => void): () => void {
+  const unsubscribeInputs = subscribeToThreadJumpHintInputs(listener);
+  const unsubscribeModifiers = shortcutModifierStore.subscribe(listener);
+  return () => {
+    unsubscribeInputs();
+    unsubscribeModifiers();
+  };
+}
+
 /**
  * Thread jump hints appear once the jump modifier has been held for a moment,
- * so a quick shortcut never flashes them, and hide when every modifier is up.
- * Shown hints stay while any modifier stays held: a key remapper can swap the
- * held jump modifier for another one mid-hold.
+ * so a quick shortcut never flashes them. Shown hints stay while any modifier
+ * stays held, as a key remapper can swap the held jump modifier mid-hold.
  */
 export function useThreadJumpHintsVisible(
-  shouldShow: boolean,
-  isAnyModifierHeld: boolean,
+  keybindings: ResolvedKeybindingsConfig,
+  routeThreadRef: ScopedThreadRef | null,
 ): boolean {
-  const [showAt, setShowAt] = React.useState<number | null>(null);
-  const visible = useDeadlinePassed(showAt);
-  const isArmed = shouldShow || (visible && isAnyModifierHeld);
-  // The clock is read inside the updater: the compiler caches a bare clock read
-  // in render once per instance, so a second hold would reuse the first deadline.
-  // React discards this render and re-runs with the update.
-  if (isArmed !== (showAt !== null)) {
-    setShowAt(isArmed ? () => deadlineAfter(THREAD_JUMP_HINT_SHOW_DELAY_MS) : null);
+  const [shownModifiers, setShownModifiers] = React.useState<ShortcutModifierState | null>(null);
+  const isShownNow = React.useSyncExternalStore(
+    subscribeToThreadJumpHintInputs,
+    () =>
+      threadJumpModifierHold.getSnapshot() &&
+      shouldShowThreadJumpHintsForModifiers(shortcutModifierStore.getSnapshot(), keybindings, {
+        platform: navigator.platform,
+        context: threadShortcutContext(routeThreadRef),
+      }),
+  );
+  const isStillShown = React.useSyncExternalStore(
+    subscribeToShownThreadJumpHintInputs,
+    () =>
+      shownModifiers !== null &&
+      isAnyShortcutModifierHeld(shortcutModifierStore.getSnapshot()) &&
+      shouldShowThreadJumpHintsForModifiers(shownModifiers, keybindings, {
+        platform: navigator.platform,
+        context: threadShortcutContext(routeThreadRef),
+      }),
+  );
+  if (isShownNow && shownModifiers === null) {
+    setShownModifiers(shortcutModifierStore.getSnapshot());
   }
-  return visible;
+  const isHidden = !isShownNow && !isStillShown;
+  if (isHidden && shownModifiers !== null) {
+    setShownModifiers(null);
+  }
+  return !isHidden;
 }
 
 export function resolveThreadLastVisitedAt(
@@ -895,6 +1021,25 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";
   }
   return "ready";
+}
+
+/** What the window title says the open thread is doing, in the words its announcer uses. */
+export function resolveWindowTitleThreadStatus(thread: SidebarThreadStatusInput): string | null {
+  // A guest waiting doesn't hide that the agent is still working.
+  switch (resolveSidebarThreadStatus({ ...thread, pendingGuestMessageCount: 0 })) {
+    case "approval":
+      return THREAD_STATUS_TEXT.approval;
+    case "input":
+      return THREAD_STATUS_TEXT.input;
+    case "preparing":
+    case "working":
+      return THREAD_STATUS_TEXT.working;
+    case "waiting":
+      // Waiting on a child thread is still this turn, so it must not read as finished.
+      return thread.runtime?.status === "running" ? THREAD_STATUS_TEXT.working : null;
+    default:
+      return null;
+  }
 }
 
 /**
@@ -1200,7 +1345,10 @@ export function resolveThreadStatusPill(input: {
 }
 
 export function getFallbackThreadIdAfterDelete<
-  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt" | "settledOverride"> &
+  T extends Pick<
+    Thread,
+    "id" | "projectId" | "createdAt" | "updatedAt" | "settledOverride" | "lineage"
+  > &
     ThreadSortInput &
     ThreadSnoozeShell,
 >(input: {
@@ -1224,7 +1372,8 @@ export function getFallbackThreadIdAfterDelete<
           thread.id !== deletedThreadId &&
           !deletedThreadIds?.has(thread.id) &&
           thread.settledOverride !== "settled" &&
-          !effectiveSnoozed(thread, { now }),
+          !effectiveSnoozed(thread, { now }) &&
+          !isSidebarHiddenThread(thread),
       ),
       sortOrder,
     )[0]?.id ?? null
