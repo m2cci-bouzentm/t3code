@@ -184,6 +184,7 @@ import {
   filterSidebarProjectScopeItems,
   firstValidTimestampMs,
   isSidebarNestedLinkClick,
+  isTicketThread,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
@@ -1096,7 +1097,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const quietThreads = useQuietThreadShells();
+  const threads = quietThreads.filter((thread) => !isTicketThread(thread));
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
     promotingDraftThreadKeys.length === 0

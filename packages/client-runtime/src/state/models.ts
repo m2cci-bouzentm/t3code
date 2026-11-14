@@ -15,6 +15,7 @@ import type {
   ProviderInstanceId,
   RunId,
   ThreadId,
+  ThreadSettledOverride,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
@@ -179,7 +180,7 @@ export interface EnvironmentThreadShell {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: string | null;
-  readonly settledOverride: "settled" | "active" | null;
+  readonly settledOverride: ThreadSettledOverride | null;
   readonly settledAt: string | null;
   readonly unsettledAt: string | null;
   readonly snoozedUntil: string | null;

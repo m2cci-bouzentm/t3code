@@ -582,6 +582,11 @@ export async function deleteSelectedThreadEntries<
   return { deletedThreadKeys, firstFailure };
 }
 
+/** A ticket waits on the board; the list shows it once its first message makes it active. */
+export function isTicketThread(thread: Pick<SidebarThreadSummary, "settledOverride">): boolean {
+  return thread.settledOverride === "backlog" || thread.settledOverride === "ready";
+}
+
 export function isSidebarHiddenThread(thread: Pick<SidebarThreadSummary, "lineage">): boolean {
   return !isListedThreadLineage(thread.lineage);
 }

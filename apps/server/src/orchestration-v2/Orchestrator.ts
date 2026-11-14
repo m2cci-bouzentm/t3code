@@ -629,6 +629,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.settle":
     case "thread.auto-settle":
     case "thread.unsettle":
+    case "thread.stage":
     case "thread.snooze":
     case "thread.unsnooze":
     case "thread.auto-settle.set":
@@ -4009,6 +4010,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           | "thread.unarchive"
           | "thread.settle"
           | "thread.unsettle"
+          | "thread.stage"
           | "thread.snooze"
           | "thread.unsnooze"
           | "thread.auto-settle.set"
@@ -4177,6 +4179,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     if (
       (command.type === "thread.settle" ||
         command.type === "thread.unsettle" ||
+        command.type === "thread.stage" ||
         command.type === "thread.snooze" ||
         command.type === "thread.unsnooze" ||
         command.type === "thread.auto-settle.set" ||
@@ -4586,6 +4589,19 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             settledAt: null,
             unsettledAt: alreadyPinnedActive ? (thread.unsettledAt ?? null) : now,
             updatedAt: alreadyPinnedActive ? thread.updatedAt : now,
+          };
+        }
+        case "thread.stage": {
+          const alreadyStaged =
+            thread.settledOverride === command.stage && thread.snoozedUntil == null;
+          return {
+            ...thread,
+            settledOverride: command.stage,
+            settledAt: null,
+            unsettledAt: alreadyStaged ? (thread.unsettledAt ?? null) : now,
+            snoozedUntil: null,
+            snoozedAt: null,
+            updatedAt: alreadyStaged ? thread.updatedAt : now,
           };
         }
         case "thread.snooze": {
@@ -5072,6 +5088,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         case "thread.settle":
           return "thread.settled" as const;
         case "thread.unsettle":
+        case "thread.stage":
           return "thread.unsettled" as const;
         case "thread.snooze":
           return "thread.snoozed" as const;
@@ -14801,6 +14818,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.unarchive":
       case "thread.settle":
       case "thread.unsettle":
+      case "thread.stage":
       case "thread.snooze":
       case "thread.unsnooze":
       case "thread.auto-settle.set":

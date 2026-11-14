@@ -463,6 +463,18 @@ const OrchestrationV2LastTitleRegeneration = Schema.Struct({
   completedAt: Schema.DateTimeUtc,
 });
 
+/** The stage a ticket holds before its first message. */
+export const ThreadTicketStage = Schema.Literals(["backlog", "ready"]);
+export type ThreadTicketStage = typeof ThreadTicketStage.Type;
+
+/** The thread's stored stage; null is an active thread nobody moved. */
+export const ThreadSettledOverride = Schema.Literals([
+  "settled",
+  "active",
+  ...ThreadTicketStage.literals,
+]);
+export type ThreadSettledOverride = typeof ThreadSettledOverride.Type;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -496,7 +508,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])).pipe(
+  settledOverride: Schema.NullOr(ThreadSettledOverride).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   settledAt: Schema.NullOr(Schema.DateTimeUtc).pipe(
@@ -2231,7 +2243,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])),
+  settledOverride: Schema.NullOr(ThreadSettledOverride),
   settledAt: Schema.NullOr(Schema.DateTimeUtc),
   unsettledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
@@ -3141,6 +3153,12 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     reason: Schema.Literal("user"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.stage"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    stage: ThreadTicketStage,
   }),
   Schema.Struct({
     type: Schema.Literal("thread.snooze"),

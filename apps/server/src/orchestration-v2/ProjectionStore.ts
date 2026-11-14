@@ -1,5 +1,9 @@
 import type { ProjectThreadAwarenessV2Input } from "@t3tools/shared/agentAwareness";
-import { applyOrchestrationV2ThreadVisit, pendingGuestMessageCount } from "@t3tools/contracts";
+import {
+  applyOrchestrationV2ThreadVisit,
+  pendingGuestMessageCount,
+  ThreadSettledOverride,
+} from "@t3tools/contracts";
 import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
 import { projectTurnItemForWire } from "./WireProjection.ts";
 import * as Stream from "effect/Stream";
@@ -1329,6 +1333,7 @@ const decodeContextTransferPayload = Schema.decodeUnknownEffect(
 
 const isProjectionStoreThreadNotFoundError = Schema.is(ProjectionStoreThreadNotFoundError);
 const isProjectionStoreReadError = Schema.is(ProjectionStoreReadError);
+const isThreadSettledOverride = Schema.is(ThreadSettledOverride);
 
 function parseEncodedPayload(json: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
@@ -8805,10 +8810,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         id: ThreadId.make(row.thread_id),
         projectId: ProjectId.make(row.project_id),
         lineage: shellIndexLineage(row),
-        settledOverride:
-          row.settled_override === "settled" || row.settled_override === "active"
-            ? row.settled_override
-            : null,
+        settledOverride: isThreadSettledOverride(row.settled_override)
+          ? row.settled_override
+          : null,
         settledAt: row.settled_at === null ? null : DateTime.makeUnsafe(row.settled_at),
         pinnedAt: row.pinned_at === null ? null : DateTime.makeUnsafe(row.pinned_at),
         snoozedUntil: row.snoozed_until === null ? null : DateTime.makeUnsafe(row.snoozed_until),
@@ -8854,10 +8858,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         projectId: ProjectId.make(row.project_id),
         title: row.title,
         lineage: shellIndexLineage(row),
-        settledOverride:
-          row.settled_override === "settled" || row.settled_override === "active"
-            ? row.settled_override
-            : null,
+        settledOverride: isThreadSettledOverride(row.settled_override)
+          ? row.settled_override
+          : null,
         settledAt: row.settled_at === null ? null : DateTime.makeUnsafe(row.settled_at),
         snoozedUntil: row.snoozed_until === null ? null : DateTime.makeUnsafe(row.snoozed_until),
         updatedAt: DateTime.makeUnsafe(row.updated_at),

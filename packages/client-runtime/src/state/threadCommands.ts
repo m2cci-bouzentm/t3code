@@ -53,6 +53,7 @@ import {
   setThreadAutoSettle,
   settleThread,
   snoozeThread,
+  stageThread,
   startThreadTurn,
   stopThreadSession,
   unarchiveThread,
@@ -206,6 +207,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     unsettle: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:unsettle",
       execute: unsettleThread,
+      scheduler,
+      concurrency,
+    }),
+    stage: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:stage",
+      execute: stageThread,
       scheduler,
       concurrency,
     }),
@@ -439,6 +446,7 @@ export function createThreadEnvironmentAtoms<R, E>(
     unarchive: rowAction(sent.unarchive),
     settle: rowAction(sent.settle),
     unsettle: rowAction(sent.unsettle),
+    stage: rowAction(sent.stage),
     snooze: rowAction(sent.snooze),
     unsnooze: rowAction(sent.unsnooze),
     pin: rowAction(sent.pin),

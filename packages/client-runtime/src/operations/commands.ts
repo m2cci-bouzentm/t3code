@@ -25,6 +25,7 @@ import {
   type RuntimeRequestId,
   type ThreadId,
   type ThreadEnvMode,
+  type ThreadTicketStage,
   type UploadChatAttachment,
   type GuestMessageId,
 } from "@t3tools/contracts";
@@ -106,6 +107,10 @@ export type SettleThreadInput = ThreadCommandInput;
 
 export interface UnsettleThreadInput extends ThreadCommandInput {
   readonly reason: "user";
+}
+
+export interface StageThreadInput extends ThreadCommandInput {
+  readonly stage: ThreadTicketStage;
 }
 
 export interface PinThreadInput extends ThreadCommandInput {
@@ -636,6 +641,17 @@ export const unsettleThread = Effect.fn("EnvironmentCommands.unsettleThread")(fu
     commandId: yield* allocateCommandId(input),
     threadId: input.threadId,
     reason: input.reason,
+  });
+});
+
+export const stageThread = Effect.fn("EnvironmentCommands.stageThread")(function* (
+  input: StageThreadInput,
+) {
+  return yield* dispatch({
+    type: "thread.stage",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    stage: input.stage,
   });
 });
 

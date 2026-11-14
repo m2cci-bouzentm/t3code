@@ -2007,6 +2007,104 @@ it.effect("explicit settle clears snooze atomically and stays idempotent after r
   }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("a ticket holds its stage until its first message makes it active", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const events = yield* EventSink.EventSinkV2;
+    const threadId = ThreadId.make("thread:ticket-stage");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-ticket-stage"),
+      threadId,
+      projectId: ProjectId.make("project:ticket-stage"),
+      title: "Ticket",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const snoozedUntil = DateTime.add(yield* DateTime.now, { hours: 1 });
+    yield* orchestrator.dispatch({
+      type: "thread.snooze",
+      commandId: CommandId.make("snooze-ticket-stage"),
+      threadId,
+      snoozedUntil: DateTime.formatIso(snoozedUntil),
+    });
+    yield* TestClock.adjust("1 second");
+
+    const backlogCommandId = CommandId.make("stage-ticket-backlog");
+    yield* orchestrator.dispatch({
+      type: "thread.stage",
+      commandId: backlogCommandId,
+      threadId,
+      stage: "backlog",
+    });
+    const stagedAt = yield* DateTime.now;
+    const committed = yield* events
+      .readByCommandId({ commandId: backlogCommandId })
+      .pipe(Stream.runCollect);
+    assert.equal(committed[0]?.event.type, "thread.unsettled");
+    assert.deepInclude(yield* projections.getThread(threadId), {
+      settledOverride: "backlog",
+      settledAt: null,
+      snoozedUntil: null,
+      snoozedAt: null,
+      updatedAt: stagedAt,
+    });
+
+    yield* TestClock.adjust("1 second");
+    yield* orchestrator.dispatch({
+      type: "thread.stage",
+      commandId: CommandId.make("stage-ticket-backlog-again"),
+      threadId,
+      stage: "backlog",
+    });
+    assert.deepInclude(yield* projections.getThread(threadId), { updatedAt: stagedAt });
+
+    yield* orchestrator.dispatch({
+      type: "thread.stage",
+      commandId: CommandId.make("stage-ticket-ready"),
+      threadId,
+      stage: "ready",
+    });
+    assert.deepInclude(yield* projections.getThread(threadId), { settledOverride: "ready" });
+
+    yield* orchestrator.dispatch({
+      type: "thread.settle",
+      commandId: CommandId.make("settle-ticket-stage"),
+      threadId,
+    });
+    assert.deepInclude(yield* projections.getThread(threadId), { settledOverride: "settled" });
+    yield* orchestrator.dispatch({
+      type: "thread.stage",
+      commandId: CommandId.make("stage-settled-ticket-ready"),
+      threadId,
+      stage: "ready",
+    });
+    assert.deepInclude(yield* projections.getThread(threadId), {
+      settledOverride: "ready",
+      settledAt: null,
+    });
+
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("ticket-first-message"),
+      threadId,
+      messageId: MessageId.make("ticket-first-message"),
+      text: "Start the work",
+      attachments: [],
+      dispatchMode: { type: "defer_start" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    assert.deepInclude(yield* projections.getThread(threadId), { settledOverride: null });
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("keeps a snooze when a live question is cancelled or an approval is answered", () =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;

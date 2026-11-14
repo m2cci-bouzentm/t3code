@@ -4,9 +4,11 @@ import { GUEST_PAGE_PATH } from "../../guestPage";
 import { withoutAssistantCitationHash } from "../../lib/assistantCitationNavigation";
 import { resolveThreadRouteTarget, type ThreadRouteTarget } from "../../threadRoutes";
 
-/** Settings and Usage open as modals over the last main-app view. */
+const APP_MODAL_PATHS = new Set(["/settings", "/usage", "/board"]);
+
+/** Settings, Usage and the Board open as modals over the last main-app view. */
 export function isAppModalPage(pathname: string) {
-  return pathname === "/settings" || pathname.startsWith("/settings/") || pathname === "/usage";
+  return APP_MODAL_PATHS.has(pathname) || pathname.startsWith("/settings/");
 }
 
 export function isSidebarUtilityPage(pathname: string) {
