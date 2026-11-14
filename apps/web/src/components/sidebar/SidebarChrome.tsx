@@ -95,7 +95,6 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           </div>
         ) : null}
       </div>
-      <SidebarBoardButton onBackdrop={backdropVariant !== null} />
     </div>
   );
 });
@@ -165,37 +164,6 @@ function HistoryNavigationButton({
         {label}
         {shortcutLabel ? ` (${shortcutLabel})` : ""}
       </TooltipPopup>
-    </Tooltip>
-  );
-}
-
-function SidebarBoardButton({ onBackdrop }: { onBackdrop: boolean }) {
-  const navigate = useNavigate();
-  const { isMobile, setOpenMobile } = useSidebar();
-
-  const handleClick = () => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    void navigate({ to: "/board" });
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-label="Board"
-            className="relative z-10 shrink-0 [-webkit-app-region:no-drag]"
-            onClick={handleClick}
-            size="icon-sm"
-            variant={onBackdrop ? "media-navigation" : "ghost"}
-          />
-        }
-      >
-        <SquareKanbanIcon className="size-3.5" />
-      </TooltipTrigger>
-      <TooltipPopup side="bottom">Board</TooltipPopup>
     </Tooltip>
   );
 }
@@ -288,6 +256,11 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     void navigate({ to: "/usage" });
   };
 
+  const handleBoardClick = () => {
+    closeMobileSidebar();
+    void navigate({ to: "/board" });
+  };
+
   const handleBackClick = () => {
     closeMobileSidebar();
     void navigateToMainApp();
@@ -320,6 +293,11 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"
             onClick={handleUsageClick}
+          />
+          <SidebarUtilityItem
+            icon={<SquareKanbanIcon />}
+            label="Board"
+            onClick={handleBoardClick}
           />
         </>
       )}
