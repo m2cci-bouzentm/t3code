@@ -44,6 +44,7 @@ import {
   planThreadBoardMove,
   THREAD_BOARD_COLUMN_LABELS,
   type ThreadBoardColumn,
+  type ThreadBoardOrderAssignment,
   type ThreadBoardStep,
   type ThreadBoardThread,
 } from "./threadBoard.logic";
@@ -117,6 +118,7 @@ export function ThreadBoardPage() {
     unsnoozeThread,
     archiveThread,
     unarchiveThread,
+    reorderActiveThread,
     confirmAndDeleteThread,
   } = useThreadActions();
   const stageThread = useOrchestrationCommand(threadEnvironment.stage, { reportFailure: false });
@@ -183,7 +185,11 @@ export function ThreadBoardPage() {
     return confirmed._tag === "Success" && confirmed.value;
   };
 
-  const moveThread = async (thread: ThreadBoardThread, to: ThreadBoardColumn) => {
+  const moveThread = async (
+    thread: ThreadBoardThread,
+    to: ThreadBoardColumn,
+    order: readonly ThreadBoardOrderAssignment[],
+  ) => {
     const steps = planThreadBoardMove(thread, to, { now });
     if (steps.includes("archive")) {
       const confirmed = await isArchiveConfirmed(thread);
@@ -193,6 +199,14 @@ export function ThreadBoardPage() {
       const result: BoardCommandResult = await runStep(step, thread);
       if (result._tag === "Failure") {
         reportBoardFailure(`Failed to move thread to ${THREAD_BOARD_COLUMN_LABELS[to]}`, result);
+        return;
+      }
+    }
+    for (const assignment of order) {
+      const target = scopeThreadRef(assignment.thread.environmentId, assignment.thread.id);
+      const result: BoardCommandResult = await reorderActiveThread(target, assignment.orderKey);
+      if (result._tag === "Failure") {
+        reportBoardFailure("Failed to save the order of the threads", result);
         return;
       }
     }

@@ -1,7 +1,7 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ThreadTicketStage } from "@t3tools/contracts";
 import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
-import { useState, type DragEvent, type FormEvent } from "react";
+import { Fragment, useState, type DragEvent, type FormEvent } from "react";
 
 import { cn } from "../../lib/utils";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
@@ -15,10 +15,14 @@ import { Toggle } from "../ui/toggle";
 import {
   groupThreadsByBoardColumn,
   isThreadBoardDropColumn,
+  isThreadBoardOrderedColumn,
   planThreadBoardMove,
+  planThreadBoardOrder,
+  resolveThreadBoardColumn,
   THREAD_BOARD_COLUMN_LABELS,
   THREAD_BOARD_COLUMNS,
   type ThreadBoardColumn,
+  type ThreadBoardOrderAssignment,
   type ThreadBoardThread,
 } from "./threadBoard.logic";
 
@@ -32,6 +36,18 @@ export interface BoardFilters {
   readonly quickProjectKeys: readonly string[];
   readonly archivedOpen: boolean;
 }
+
+/** Where a dragged card lands: before the card at `index` of the column. */
+interface BoardDropTarget {
+  readonly column: ThreadBoardColumn;
+  readonly index: number;
+}
+
+type BoardMoveHandler = (
+  thread: ThreadBoardThread,
+  to: ThreadBoardColumn,
+  order: readonly ThreadBoardOrderAssignment[],
+) => void;
 
 interface QuickProject {
   readonly project: BoardProject;
@@ -125,6 +141,15 @@ function ticketStageOfColumn(column: ThreadBoardColumn): ThreadTicketStage | nul
   return null;
 }
 
+function BoardDropLine() {
+  return (
+    <div
+      className="-my-[5px] h-0.5 shrink-0 rounded-full bg-primary"
+      data-testid="thread-board-drop-line"
+    />
+  );
+}
+
 function ThreadBoardCard(props: {
   thread: ThreadBoardThread;
   column: ThreadBoardColumn;
@@ -132,9 +157,10 @@ function ThreadBoardCard(props: {
   showProject: boolean;
   now: string;
   onOpen: (thread: ThreadBoardThread) => void;
-  onMove: (thread: ThreadBoardThread, to: ThreadBoardColumn) => void;
+  onMove: BoardMoveHandler;
   onDelete: (thread: ThreadBoardThread) => void;
   onDragStart: (thread: ThreadBoardThread) => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
 }) {
   const { thread, column, project } = props;
@@ -153,6 +179,7 @@ function ThreadBoardCard(props: {
     <div
       draggable
       onDragStart={handleDragStart}
+      onDragOver={props.onDragOver}
       onDragEnd={props.onDragEnd}
       className="flex cursor-grab flex-col gap-1.5 rounded-md border bg-card p-2.5 text-sm shadow-xs active:cursor-grabbing"
       data-testid="thread-board-card"
@@ -177,7 +204,7 @@ function ThreadBoardCard(props: {
           </MenuTrigger>
           <MenuPopup align="end">
             {moveTargets.map((target) => (
-              <MenuItem key={target} onClick={() => props.onMove(thread, target)}>
+              <MenuItem key={target} onClick={() => props.onMove(thread, target, [])}>
                 Move to {THREAD_BOARD_COLUMN_LABELS[target]}
               </MenuItem>
             ))}
@@ -291,12 +318,13 @@ export function ThreadBoard(props: {
   now: string;
   onFiltersChange: (filters: BoardFilters) => void;
   onOpen: (thread: ThreadBoardThread) => void;
-  onMove: (thread: ThreadBoardThread, to: ThreadBoardColumn) => void;
+  /** `order` holds the order keys that put the thread at the place of the drop. */
+  onMove: BoardMoveHandler;
   onDelete: (thread: ThreadBoardThread) => void;
   onCreate: (project: BoardProject, title: string, stage: ThreadTicketStage) => Promise<void>;
 }) {
   const [draggedThread, setDraggedThread] = useState<ThreadBoardThread | null>(null);
-  const [dropColumn, setDropColumn] = useState<ThreadBoardColumn | null>(null);
+  const [dropTarget, setDropTarget] = useState<BoardDropTarget | null>(null);
 
   const { now, filters } = props;
   const projectByMemberKey = indexBoardProjects(props.allProjects);
@@ -323,6 +351,7 @@ export function ThreadBoard(props: {
           isThreadOfProjects(thread, projectByMemberKey, quickProjectKeys),
         );
   const columns = groupThreadsByBoardColumn(shownThreads, { now });
+  const unfilteredColumns = groupThreadsByBoardColumn(props.threads, { now });
   const ticketProjects = props.projects.filter((project) => !project.isScratch);
   const filteredTicketProject = resolveFilteredTicketProject({
     scopedProject,
@@ -338,25 +367,50 @@ export function ThreadBoard(props: {
     props.onFiltersChange({ ...filters, quickProjectKeys: [...next] });
   };
 
-  const handleDragOver = (event: DragEvent<HTMLElement>, column: ThreadBoardColumn) => {
+  const handleDragOver = (event: DragEvent<HTMLElement>, target: BoardDropTarget) => {
     if (draggedThread === null) return;
-    if (planThreadBoardMove(draggedThread, column, { now }).length === 0) return;
+    const isSameColumn = resolveThreadBoardColumn(draggedThread, { now }) === target.column;
+    const isOrderDrop = isSameColumn && isThreadBoardOrderedColumn(target.column);
+    const isMoveDrop = planThreadBoardMove(draggedThread, target.column, { now }).length > 0;
+    if (!isOrderDrop && !isMoveDrop) return;
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
-    if (dropColumn !== column) setDropColumn(column);
+    const isSameTarget = dropTarget?.column === target.column && dropTarget.index === target.index;
+    if (!isSameTarget) setDropTarget(target);
   };
 
-  const handleDrop = (event: DragEvent<HTMLElement>, column: ThreadBoardColumn) => {
+  const handleCardDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    column: ThreadBoardColumn,
+    cardIndex: number,
+  ) => {
+    const card = event.currentTarget.getBoundingClientRect();
+    const isLowerHalf = event.clientY > card.top + card.height / 2;
+    handleDragOver(event, { column, index: isLowerHalf ? cardIndex + 1 : cardIndex });
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const thread = draggedThread;
+    const target = dropTarget;
     setDraggedThread(null);
-    setDropColumn(null);
-    if (thread !== null) props.onMove(thread, column);
+    setDropTarget(null);
+    if (thread === null || target === null) return;
+    const order = isThreadBoardOrderedColumn(target.column)
+      ? planThreadBoardOrder({
+          shownThreads: columns[target.column],
+          columnThreads: unfilteredColumns[target.column],
+          movedThread: thread,
+          index: target.index,
+        })
+      : [];
+    props.onMove(thread, target.column, order);
   };
 
   const handleDragEnd = () => {
     setDraggedThread(null);
-    setDropColumn(null);
+    setDropTarget(null);
   };
 
   return (
@@ -421,16 +475,20 @@ export function ThreadBoard(props: {
           const threads = columns[column];
           const collapsed = column === "archived" && !filters.archivedOpen;
           const ticketStage = ticketStageOfColumn(column);
+          const dropLineIndex =
+            dropTarget?.column === column && isThreadBoardOrderedColumn(column)
+              ? dropTarget.index
+              : null;
           return (
             <section
               key={column}
               aria-label={THREAD_BOARD_COLUMN_LABELS[column]}
-              onDragOver={(event) => handleDragOver(event, column)}
-              onDrop={(event) => handleDrop(event, column)}
+              onDragOver={(event) => handleDragOver(event, { column, index: threads.length })}
+              onDrop={handleDrop}
               className={cn(
                 "flex min-h-0 shrink-0 flex-col gap-2 rounded-lg border bg-muted/40 p-2",
                 collapsed ? "w-40" : "w-72",
-                dropColumn === column && "border-primary bg-primary/5",
+                dropTarget?.column === column && "border-primary bg-primary/5",
                 draggedThread !== null && !isThreadBoardDropColumn(column) && "opacity-60",
               )}
               data-testid={`thread-board-column-${column}`}
@@ -464,21 +522,29 @@ export function ThreadBoard(props: {
                   {threads.length === 0 ? (
                     <p className="px-1 py-2 text-xs text-muted-foreground">No threads</p>
                   ) : null}
-                  {threads.map((thread) => (
-                    <ThreadBoardCard
+                  {threads.map((thread, cardIndex) => (
+                    <Fragment
                       key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
-                      thread={thread}
-                      column={column}
-                      project={resolveThreadBoardProject(thread, projectByMemberKey)}
-                      showProject={scopedProject === undefined}
-                      now={now}
-                      onOpen={props.onOpen}
-                      onMove={props.onMove}
-                      onDelete={props.onDelete}
-                      onDragStart={setDraggedThread}
-                      onDragEnd={handleDragEnd}
-                    />
+                    >
+                      {dropLineIndex === cardIndex ? <BoardDropLine /> : null}
+                      <ThreadBoardCard
+                        thread={thread}
+                        column={column}
+                        project={resolveThreadBoardProject(thread, projectByMemberKey)}
+                        showProject={scopedProject === undefined}
+                        now={now}
+                        onOpen={props.onOpen}
+                        onMove={props.onMove}
+                        onDelete={props.onDelete}
+                        onDragStart={setDraggedThread}
+                        onDragOver={(event) => handleCardDragOver(event, column, cardIndex)}
+                        onDragEnd={handleDragEnd}
+                      />
+                    </Fragment>
                   ))}
+                  {threads.length > 0 && dropLineIndex === threads.length ? (
+                    <BoardDropLine />
+                  ) : null}
                 </div>
               )}
             </section>

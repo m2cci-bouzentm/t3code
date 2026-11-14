@@ -46,6 +46,7 @@ function makeThread(overrides: Partial<ThreadBoardThread>): ThreadBoardThread {
     latestUserMessageAt: null,
     latestRun: null,
     runtime: null,
+    activeOrderKey: null,
     updatedAt: "2026-11-14T09:00:00.000Z",
     ...overrides,
   } as ThreadBoardThread;
@@ -190,7 +191,7 @@ describe("ThreadBoard", () => {
     expect(screen.getByRole("menuitem", { name: "Move to Active" }).elements()).toHaveLength(0);
     expect(screen.getByRole("menuitem", { name: "Move to Snoozed" }).elements()).toHaveLength(0);
     await userEvent.click(screen.getByRole("menuitem", { name: "Move to Ready" }));
-    expect(handlers.onMove).toHaveBeenCalledExactlyOnceWith(THREADS[2], "ready");
+    expect(handlers.onMove).toHaveBeenCalledExactlyOnceWith(THREADS[2], "ready", []);
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for Write the importer" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
@@ -206,7 +207,36 @@ describe("ThreadBoard", () => {
       screen.getByRole("region", { name: "Ready" }),
     );
 
-    expect(handlers.onMove).toHaveBeenCalledExactlyOnceWith(THREADS[0], "ready");
+    expect(handlers.onMove).toHaveBeenCalledExactlyOnceWith(THREADS[0], "ready", [
+      { thread: THREADS[0], orderKey: expect.any(String) },
+    ]);
+  });
+
+  it("puts a dragged thread above the card it is dropped on, in the same column", async () => {
+    const upper = makeThread({
+      id: "upper" as never,
+      title: "Upper ticket",
+      settledOverride: "backlog",
+      updatedAt: "2026-11-14T09:30:00.000Z",
+    });
+    const lower = makeThread({
+      id: "lower" as never,
+      title: "Lower ticket",
+      settledOverride: "backlog",
+    });
+    const { board, handlers } = renderBoard({ threads: [upper, lower] });
+    await using screen = await render(board, { router: false });
+
+    await userEvent.dragAndDrop(screen.getByText("Lower ticket"), screen.getByText("Upper ticket"));
+
+    expect(handlers.onMove).toHaveBeenCalledOnce();
+    const [thread, column, order] = handlers.onMove.mock.calls[0]!;
+    expect(thread).toBe(lower);
+    expect(column).toBe("backlog");
+    expect(order.map((assignment: { thread: ThreadBoardThread }) => assignment.thread)).toEqual([
+      lower,
+      upper,
+    ]);
   });
 
   it("opens a thread from its title", async () => {
