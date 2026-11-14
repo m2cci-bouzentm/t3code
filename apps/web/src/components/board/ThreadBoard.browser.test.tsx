@@ -1,19 +1,29 @@
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/models";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
-import { ThreadBoard } from "./ThreadBoard";
+import { ThreadBoard, type BoardProject } from "./ThreadBoard";
 import type { ThreadBoardThread } from "./threadBoard.logic";
 
 const NOW = "2026-11-14T10:00:00.000Z";
 
-const PROJECT = {
-  environmentId: "local",
-  id: "project-1",
-  title: "connectAI",
-  workspaceRoot: "/work/connectAI",
-} as unknown as EnvironmentProject;
+/** A project with one copy on this machine and one copy on a second machine. */
+function makeProject(id: string, displayName: string): BoardProject {
+  return {
+    environmentId: "local",
+    id,
+    title: displayName,
+    displayName,
+    projectKey: `group:${id}`,
+    workspaceRoot: `/work/${displayName}`,
+    memberProjects: [
+      { environmentId: "local", id },
+      { environmentId: "mac", id: `${id}-mac` },
+    ],
+  } as unknown as BoardProject;
+}
+
+const PROJECT = makeProject("project-1", "connectAI");
 
 function makeThread(overrides: Partial<ThreadBoardThread>): ThreadBoardThread {
   return {
@@ -43,17 +53,19 @@ const THREADS = [
   makeThread({ id: "done" as never, title: "Ship the dashboard", settledOverride: "settled" }),
 ];
 
-const OTHER_PROJECT = {
-  environmentId: "local",
-  id: "project-2",
-  title: "cercledeslangues",
-  workspaceRoot: "/work/cercledeslangues",
-} as unknown as EnvironmentProject;
+const OTHER_PROJECT = makeProject("project-2", "cercledeslangues");
 
 const OTHER_THREAD = makeThread({
   id: "other" as never,
   projectId: "project-2" as never,
   title: "Translate the emails",
+});
+
+const MAC_THREAD = makeThread({
+  id: "mac-thread" as never,
+  environmentId: "mac" as never,
+  projectId: "project-1-mac" as never,
+  title: "Review the Mac build",
 });
 
 function renderBoard() {
@@ -138,7 +150,7 @@ describe("ThreadBoard", () => {
     const onCreate = vi.fn(async () => {});
     await using screen = await render(
       <ThreadBoard
-        threads={[...THREADS, OTHER_THREAD]}
+        threads={[...THREADS, OTHER_THREAD, MAC_THREAD]}
         projects={[PROJECT, OTHER_PROJECT]}
         allProjects={[PROJECT, OTHER_PROJECT]}
         scopedProject={undefined}
@@ -152,9 +164,9 @@ describe("ThreadBoard", () => {
     );
     const quickFilter = screen.getByRole("group", { name: "Quick project filter" });
     await expect
-      .element(quickFilter.getByRole("button", { name: "connectAI, 4 threads" }))
+      .element(quickFilter.getByRole("button", { name: "connectAI, 5 threads" }))
       .toBeVisible();
-    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(5);
+    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(6);
 
     await userEvent.click(quickFilter.getByRole("button", { name: "cercledeslangues, 1 thread" }));
     await expect.element(screen.getByText("Translate the emails")).toBeVisible();
@@ -165,7 +177,7 @@ describe("ThreadBoard", () => {
     expect(onCreate).toHaveBeenCalledExactlyOnceWith(OTHER_PROJECT, "Add Dutch", "backlog");
 
     await userEvent.click(quickFilter.getByRole("button", { name: "cercledeslangues, 1 thread" }));
-    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(5);
+    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(6);
   });
 
   it("shows no quick filter when the global filter picks one project", async () => {

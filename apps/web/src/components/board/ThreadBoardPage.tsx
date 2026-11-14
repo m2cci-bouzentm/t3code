@@ -1,5 +1,6 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { presentThreadShell, type EnvironmentProject } from "@t3tools/client-runtime/state/models";
+import { presentThreadShell } from "@t3tools/client-runtime/state/models";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   squashAtomCommandFailure,
   type AtomCommandResult,
@@ -16,6 +17,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useNowMinute } from "../../hooks/useNowMinute";
+import { useSidebarProjectGroups } from "../../hooks/useSidebarProjectGroups";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import {
   refreshArchivedThreadsForEnvironment,
@@ -32,7 +34,13 @@ import { buildThreadRouteParams } from "../../threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ALL_PROJECTS, projectKey, ThreadBoard, threadProjectKey } from "./ThreadBoard";
+import {
+  ALL_PROJECTS,
+  indexBoardProjects,
+  resolveThreadBoardProject,
+  ThreadBoard,
+  type BoardProject,
+} from "./ThreadBoard";
 import {
   planThreadBoardMove,
   THREAD_BOARD_COLUMN_LABELS,
@@ -66,7 +74,7 @@ function reportBoardFailure(title: string, result: BoardCommandFailure) {
 }
 
 /** The model and mode a new thread in this project starts with, read when the ticket is made. */
-function resolveTicketDefaults(project: EnvironmentProject): TicketDefaults | null {
+function resolveTicketDefaults(project: BoardProject): TicketDefaults | null {
   const settings = appAtomRegistry.get(serverEnvironment.settingsValueAtom(project.environmentId));
   if (settings === null) return null;
   const projectSettings = resolveProjectSettings(settings, project.id, project).settings;
@@ -94,19 +102,21 @@ export function ThreadBoardPage() {
   const nowMinute = useNowMinute();
   const liveThreads = useQuietThreadShells();
   const delegatedUnderParent = useDelegatedUnderParent();
-  const allProjects = useProjects();
+  const environmentProjects = useProjects();
+  const allProjects = useSidebarProjectGroups();
   const { settleThread, unsettleThread, unsnoozeThread, archiveThread, unarchiveThread } =
     useThreadActions();
   const stageThread = useOrchestrationCommand(threadEnvironment.stage, { reportFailure: false });
   const createThread = useOrchestrationCommand(threadEnvironment.create, { reportFailure: false });
 
   const now = `${nowMinute}:00Z`;
-  const projects = allProjects.filter((project) => project.archivedAt == null);
+  const projects = pickableProjectGroups(allProjects);
+  const projectByMemberKey = indexBoardProjects(allProjects);
   const environmentIds: EnvironmentId[] = [
-    ...new Set(allProjects.map((project) => project.environmentId)),
+    ...new Set(environmentProjects.map((project) => project.environmentId)),
   ];
   const { snapshots: archivedSnapshots } = useArchivedThreadSnapshots(environmentIds);
-  const scopedProject = projects.find((project) => projectKey(project) === search.project);
+  const scopedProject = projects.find((project) => project.projectKey === search.project);
   const liveThreadKeys = new Set(
     liveThreads.map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
   );
@@ -127,7 +137,9 @@ export function ThreadBoardPage() {
       ),
   );
   const boardThreads = listedThreads.filter(
-    (thread) => scopedProject === undefined || threadProjectKey(thread) === search.project,
+    (thread) =>
+      scopedProject === undefined ||
+      resolveThreadBoardProject(thread, projectByMemberKey) === scopedProject,
   );
 
   const runStep = (step: ThreadBoardStep, thread: ThreadBoardThread) => {
@@ -167,11 +179,7 @@ export function ThreadBoardPage() {
     refreshArchivedThreadsForEnvironment(thread.environmentId);
   };
 
-  const createTicket = async (
-    project: EnvironmentProject,
-    title: string,
-    stage: ThreadTicketStage,
-  ) => {
+  const createTicket = async (project: BoardProject, title: string, stage: ThreadTicketStage) => {
     const defaults = resolveTicketDefaults(project);
     if (defaults === null) {
       toastManager.add(
