@@ -76,19 +76,11 @@ describe("resolveThreadBoardColumn", () => {
 });
 
 describe("groupThreadsByBoardColumn", () => {
-  it("leaves out subagent threads and sorts by the last update", () => {
+  it("sorts each column by the last update", () => {
     const columns = groupThreadsByBoardColumn(
       [
         makeThread({ id: "old" as never, updatedAt: "2026-11-14T08:00:00.000Z" }),
         makeThread({ id: "new" as never, updatedAt: "2026-11-14T09:30:00.000Z" }),
-        makeThread({
-          id: "child" as never,
-          lineage: {
-            parentThreadId: "old",
-            relationshipToParent: "subagent",
-            rootThreadId: "old",
-          } as never,
-        }),
       ],
       NOW,
     );

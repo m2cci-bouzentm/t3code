@@ -4,6 +4,7 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import type {
   EnvironmentId,
   ModelSelection,
@@ -22,7 +23,7 @@ import {
 } from "../../lib/archivedThreadsState";
 import { newThreadId } from "../../lib/utils";
 import { resolveProjectDefaultProviderModelSelection } from "../../providerInstances";
-import { useProjects, useThreadShells } from "../../state/entities";
+import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../../state/entities";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
@@ -91,7 +92,8 @@ export function ThreadBoardPage() {
   const search = useSearch({ from: "/_chat/board" });
   const navigate = useNavigate();
   const nowMinute = useNowMinute();
-  const liveThreads = useThreadShells();
+  const liveThreads = useQuietThreadShells();
+  const delegatedUnderParent = useDelegatedUnderParent();
   const allProjects = useProjects();
   const { settleThread, unsettleThread, unsnoozeThread, archiveThread, unarchiveThread } =
     useThreadActions();
@@ -116,7 +118,15 @@ export function ThreadBoardPage() {
       (thread) =>
         !liveThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
     );
-  const boardThreads = [...liveThreads, ...archivedThreads].filter(
+  const listedThreads = [...liveThreads, ...archivedThreads].filter(
+    (thread) =>
+      !isShownUnderParent(
+        scopeThreadRef(thread.environmentId, thread.id),
+        thread.lineage,
+        delegatedUnderParent,
+      ),
+  );
+  const boardThreads = listedThreads.filter(
     (thread) => scopedProject === undefined || threadProjectKey(thread) === search.project,
   );
 

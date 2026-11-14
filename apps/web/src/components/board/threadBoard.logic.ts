@@ -1,11 +1,7 @@
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 
 import type { SidebarThreadSummary } from "../../types";
-import {
-  isSidebarHiddenThread,
-  resolveSidebarThreadStatus,
-  type SidebarThreadStatus,
-} from "../Sidebar.logic";
+import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "../Sidebar.logic";
 
 export const THREAD_BOARD_COLUMNS = [
   "backlog",
@@ -77,7 +73,6 @@ export function groupThreadsByBoardColumn(
     archived: [],
   };
   for (const thread of threads) {
-    if (isSidebarHiddenThread(thread)) continue;
     columns[resolveThreadBoardColumn(thread, options)].push(thread);
   }
   for (const column of THREAD_BOARD_COLUMNS) {
