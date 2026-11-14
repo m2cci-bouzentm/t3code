@@ -1098,7 +1098,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ),
         );
   const quietThreads = useQuietThreadShells();
-  const threads = quietThreads.filter((thread) => !isTicketThread(thread));
+  const ticketNow = `${useNowMinute()}:00Z`;
+  const threads = quietThreads.filter((thread) => !isTicketThread(thread, { now: ticketNow }));
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
     promotingDraftThreadKeys.length === 0

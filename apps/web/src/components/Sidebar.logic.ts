@@ -582,9 +582,16 @@ export async function deleteSelectedThreadEntries<
   return { deletedThreadKeys, firstFailure };
 }
 
-/** A ticket waits on the board; the list shows it once its first message makes it active. */
-export function isTicketThread(thread: Pick<SidebarThreadSummary, "settledOverride">): boolean {
-  return thread.settledOverride === "backlog" || thread.settledOverride === "ready";
+/**
+ * A ticket waits on the board in Backlog or Ready; the list shows it once its first message
+ * makes it active. A snoozed ticket is in Snoozed on the board, so the list shows it too.
+ */
+export function isTicketThread(
+  thread: SidebarThreadSummary,
+  options: { readonly now: string },
+): boolean {
+  const isStaged = thread.settledOverride === "backlog" || thread.settledOverride === "ready";
+  return isStaged && !effectiveSnoozed(thread, options);
 }
 
 export function isSidebarHiddenThread(thread: Pick<SidebarThreadSummary, "lineage">): boolean {
