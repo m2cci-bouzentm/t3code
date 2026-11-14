@@ -43,6 +43,19 @@ const THREADS = [
   makeThread({ id: "done" as never, title: "Ship the dashboard", settledOverride: "settled" }),
 ];
 
+const OTHER_PROJECT = {
+  environmentId: "local",
+  id: "project-2",
+  title: "cercledeslangues",
+  workspaceRoot: "/work/cercledeslangues",
+} as unknown as EnvironmentProject;
+
+const OTHER_THREAD = makeThread({
+  id: "other" as never,
+  projectId: "project-2" as never,
+  title: "Translate the emails",
+});
+
 function renderBoard() {
   const onMove = vi.fn();
   const onCreate = vi.fn(async () => {});
@@ -119,5 +132,46 @@ describe("ThreadBoard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Fix the login bug" }));
 
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(THREADS[1]);
+  });
+
+  it("narrows all projects to the projects picked in the quick filter", async () => {
+    const onCreate = vi.fn(async () => {});
+    await using screen = await render(
+      <ThreadBoard
+        threads={[...THREADS, OTHER_THREAD]}
+        projects={[PROJECT, OTHER_PROJECT]}
+        allProjects={[PROJECT, OTHER_PROJECT]}
+        scopedProject={undefined}
+        now={NOW}
+        onProjectChange={() => {}}
+        onOpen={() => {}}
+        onMove={() => {}}
+        onCreate={onCreate}
+      />,
+      { router: false },
+    );
+    const quickFilter = screen.getByRole("group", { name: "Quick project filter" });
+    await expect
+      .element(quickFilter.getByRole("button", { name: "connectAI, 4 threads" }))
+      .toBeVisible();
+    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(5);
+
+    await userEvent.click(quickFilter.getByRole("button", { name: "cercledeslangues, 1 thread" }));
+    await expect.element(screen.getByText("Translate the emails")).toBeVisible();
+    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(1);
+
+    await userEvent.fill(screen.getByRole("textbox", { name: "New Backlog ticket" }), "Add Dutch");
+    await userEvent.click(screen.getByRole("button", { name: "Add Backlog ticket" }));
+    expect(onCreate).toHaveBeenCalledExactlyOnceWith(OTHER_PROJECT, "Add Dutch", "backlog");
+
+    await userEvent.click(quickFilter.getByRole("button", { name: "cercledeslangues, 1 thread" }));
+    expect(screen.getByTestId("thread-board-card").elements()).toHaveLength(5);
+  });
+
+  it("shows no quick filter when the global filter picks one project", async () => {
+    const { board } = renderBoard();
+    await using screen = await render(board, { router: false });
+
+    expect(screen.getByRole("group", { name: "Quick project filter" }).elements()).toHaveLength(0);
   });
 });

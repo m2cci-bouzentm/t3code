@@ -11,6 +11,7 @@ import { resolveThreadStatusPill } from "../Sidebar.logic";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Toggle } from "../ui/toggle";
 import {
   groupThreadsByBoardColumn,
   isThreadBoardDropColumn,
@@ -31,6 +32,38 @@ export function threadProjectKey(
   thread: Pick<ThreadBoardThread, "environmentId" | "projectId">,
 ): string {
   return `${thread.environmentId}:${thread.projectId}`;
+}
+
+interface QuickProject {
+  readonly project: EnvironmentProject;
+  readonly threadCount: number;
+}
+
+/** The projects that have a thread on the board, the one with the most threads first. */
+function listQuickProjects(
+  threads: readonly ThreadBoardThread[],
+  projectByKey: ReadonlyMap<string, EnvironmentProject>,
+): QuickProject[] {
+  const threadCountByKey = new Map<string, number>();
+  for (const thread of threads) {
+    const key = threadProjectKey(thread);
+    threadCountByKey.set(key, (threadCountByKey.get(key) ?? 0) + 1);
+  }
+  const quickProjects: QuickProject[] = [];
+  for (const [key, threadCount] of threadCountByKey) {
+    const project = projectByKey.get(key);
+    if (project) quickProjects.push({ project, threadCount });
+  }
+  return quickProjects.sort((left, right) => right.threadCount - left.threadCount);
+}
+
+/** The one project the quick filter shows, which a new ticket then goes to. */
+function soleQuickProject(
+  quickProjects: readonly QuickProject[],
+  quickProjectKeys: ReadonlySet<string>,
+): EnvironmentProject | undefined {
+  if (quickProjectKeys.size !== 1) return undefined;
+  return quickProjects.find(({ project }) => quickProjectKeys.has(projectKey(project)))?.project;
 }
 
 function ticketStageOfColumn(column: ThreadBoardColumn): ThreadTicketStage | null {
@@ -208,10 +241,22 @@ export function ThreadBoard(props: {
   const [draggedThread, setDraggedThread] = useState<ThreadBoardThread | null>(null);
   const [dropColumn, setDropColumn] = useState<ThreadBoardColumn | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [quickProjectKeys, setQuickProjectKeys] = useState<ReadonlySet<string>>(new Set());
 
   const { now, scopedProject } = props;
-  const columns = groupThreadsByBoardColumn(props.threads, { now });
   const projectByKey = new Map(props.allProjects.map((project) => [projectKey(project), project]));
+  const quickProjects = scopedProject ? [] : listQuickProjects(props.threads, projectByKey);
+  const shownQuickProjectKeys = new Set(
+    quickProjects
+      .map(({ project }) => projectKey(project))
+      .filter((key) => quickProjectKeys.has(key)),
+  );
+  const shownThreads =
+    shownQuickProjectKeys.size === 0
+      ? props.threads
+      : props.threads.filter((thread) => shownQuickProjectKeys.has(threadProjectKey(thread)));
+  const columns = groupThreadsByBoardColumn(shownThreads, { now });
+  const ticketProject = scopedProject ?? soleQuickProject(quickProjects, shownQuickProjectKeys);
 
   const handleDragOver = (event: DragEvent<HTMLElement>, column: ThreadBoardColumn) => {
     if (draggedThread === null) return;
@@ -234,6 +279,13 @@ export function ThreadBoard(props: {
     setDropColumn(null);
   };
 
+  const handleQuickProjectToggle = (key: string, pressed: boolean) => {
+    const next = new Set(shownQuickProjectKeys);
+    if (pressed) next.add(key);
+    else next.delete(key);
+    setQuickProjectKeys(next);
+  };
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-4 pt-3">
@@ -250,6 +302,30 @@ export function ThreadBoard(props: {
             </option>
           ))}
         </select>
+        {quickProjects.length > 1 ? (
+          <div
+            role="group"
+            aria-label="Quick project filter"
+            className="flex min-w-0 items-center gap-1 overflow-x-auto"
+          >
+            {quickProjects.map(({ project, threadCount }) => (
+              <Toggle
+                key={projectKey(project)}
+                size="xs"
+                variant="outline"
+                aria-label={`${project.title}, ${threadCount} ${threadCount === 1 ? "thread" : "threads"}`}
+                pressed={shownQuickProjectKeys.has(projectKey(project))}
+                onPressedChange={(pressed) =>
+                  handleQuickProjectToggle(projectKey(project), pressed)
+                }
+              >
+                <ProjectFavicon project={project} className="size-3.5 shrink-0" />
+                <span>{project.title}</span>
+                <span className="text-muted-foreground">{threadCount}</span>
+              </Toggle>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
         {THREAD_BOARD_COLUMNS.map((column) => {
@@ -288,7 +364,7 @@ export function ThreadBoard(props: {
                 <NewTicketForm
                   stage={ticketStage}
                   projects={props.projects}
-                  scopedProject={scopedProject}
+                  scopedProject={ticketProject}
                   onCreate={props.onCreate}
                 />
               ) : null}
