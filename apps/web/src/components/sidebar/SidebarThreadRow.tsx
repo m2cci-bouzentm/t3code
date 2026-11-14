@@ -154,7 +154,11 @@ function RelativeTimeLabel(props: { timestamp: string | null }) {
 }
 
 function JumpHintBadge(props: { label: string }) {
-  return <Kbd aria-hidden>{props.label}</Kbd>;
+  return (
+    <Kbd aria-hidden data-jump-hint>
+      {props.label}
+    </Kbd>
+  );
 }
 
 function WorkingDuration(props: { environmentId: EnvironmentId; startedAt: string | null }) {
