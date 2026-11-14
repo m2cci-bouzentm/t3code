@@ -1,7 +1,7 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
 import type { ThreadTicketStage } from "@t3tools/contracts";
-import { ChevronRightIcon, ClockIcon, EllipsisIcon, PlusIcon } from "lucide-react";
+import { AlarmClockIcon, ChevronRightIcon, ClockIcon, EllipsisIcon, PlusIcon } from "lucide-react";
 import { Fragment, useState, type DragEvent, type FormEvent } from "react";
 
 import { cn } from "../../lib/utils";
@@ -9,7 +9,7 @@ import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { resolveThreadStatusPill } from "../Sidebar.logic";
-import type { SnoozePreset } from "../Sidebar.snooze";
+import { snoozeWakeLabel, type SnoozePreset } from "../Sidebar.snooze";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -206,6 +206,7 @@ function ThreadBoardCard(props: {
   now: string;
   onOpen: (thread: ThreadBoardThread) => void;
   listSnoozePresets: (thread: ThreadBoardThread) => readonly SnoozePreset[];
+  formatWakeTime: (snoozedUntil: string) => string;
   onMove: BoardMoveHandler;
   onSnooze: BoardSnoozeHandler;
   onDelete: (thread: ThreadBoardThread) => void;
@@ -289,7 +290,15 @@ function ThreadBoardCard(props: {
             {pill.label}
           </span>
         ) : null}
-        <span className="ms-auto shrink-0">{formatRelativeTimeLabel(thread.updatedAt)}</span>
+        {column === "snoozed" && thread.snoozedUntil !== null ? (
+          <span className="ms-auto flex shrink-0 items-center gap-1 text-info-foreground">
+            <AlarmClockIcon className="size-3" />
+            {snoozeWakeLabel(thread.snoozedUntil, { now: props.now })}, until{" "}
+            {props.formatWakeTime(thread.snoozedUntil)}
+          </span>
+        ) : (
+          <span className="ms-auto shrink-0">{formatRelativeTimeLabel(thread.updatedAt)}</span>
+        )}
       </div>
     </div>
   );
@@ -381,6 +390,8 @@ export function ThreadBoard(props: {
   onMove: BoardMoveHandler;
   /** The snooze times the menu of a thread offers. */
   listSnoozePresets: (thread: ThreadBoardThread) => readonly SnoozePreset[];
+  /** The wake time of a snoozed thread, as the card shows it. */
+  formatWakeTime: (snoozedUntil: string) => string;
   onSnooze: BoardSnoozeHandler;
   onDelete: (thread: ThreadBoardThread) => void;
   onCreate: (project: BoardProject, title: string, stage: ThreadTicketStage) => Promise<void>;
@@ -597,6 +608,7 @@ export function ThreadBoard(props: {
                         now={now}
                         onOpen={props.onOpen}
                         listSnoozePresets={props.listSnoozePresets}
+                        formatWakeTime={props.formatWakeTime}
                         onMove={props.onMove}
                         onSnooze={props.onSnooze}
                         onDelete={props.onDelete}

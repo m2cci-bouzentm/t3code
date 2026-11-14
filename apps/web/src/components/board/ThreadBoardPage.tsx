@@ -36,6 +36,7 @@ import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
+import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
 import { requestCustomSnooze } from "../CustomSnoozeDialog";
@@ -306,6 +307,7 @@ export function ThreadBoardPage() {
           onOpen={handleOpenThread}
           onMove={moveThread}
           listSnoozePresets={listSnoozePresets}
+          formatWakeTime={(snoozedUntil) => formatUpcomingTimestamp(snoozedUntil, timestampFormat)}
           onSnooze={snoozeBoardThread}
           onDelete={deleteThread}
           onCreate={createTicket}

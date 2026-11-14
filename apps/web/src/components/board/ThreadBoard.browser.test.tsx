@@ -121,6 +121,7 @@ function BoardHarness(props: {
       now={NOW}
       onFiltersChange={setFilters}
       listSnoozePresets={() => SNOOZE_PRESETS}
+      formatWakeTime={() => "Mon 9:00"}
       {...props.handlers}
     />
   );
@@ -262,6 +263,20 @@ describe("ThreadBoard", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Snooze" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Custom…" }));
     expect(handlers.onSnooze).toHaveBeenLastCalledWith(THREADS[1], SNOOZE_PRESETS, null);
+  });
+
+  it("shows on a snoozed card the time left and the wake time", async () => {
+    const snoozed = makeThread({
+      id: "snoozed" as never,
+      title: "Wait for the review",
+      snoozedUntil: "2026-11-16T09:00:00.000Z",
+    });
+    const { board } = renderBoard({ threads: [snoozed] });
+    await using screen = await render(board, { router: false });
+
+    await expect
+      .element(screen.getByRole("region", { name: "Snoozed" }).getByText("2d, until Mon 9:00"))
+      .toBeVisible();
   });
 
   it("opens a thread from its title", async () => {
