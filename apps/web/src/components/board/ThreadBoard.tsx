@@ -10,7 +10,7 @@ import { ProjectFavicon } from "../ProjectFavicon";
 import { resolveThreadStatusPill } from "../Sidebar.logic";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Toggle } from "../ui/toggle";
 import {
   groupThreadsByBoardColumn,
@@ -22,15 +22,32 @@ import {
   type ThreadBoardThread,
 } from "./threadBoard.logic";
 
-export const ALL_PROJECTS = "";
-
 /** A project as the sidebar groups it: its copies on every machine are one project. */
 export type BoardProject = SidebarProjectSnapshot;
 
+export interface BoardFilters {
+  /** The project the board is limited to; empty shows every project. */
+  readonly projectKey: string;
+  /** With every project shown, the projects the quick filter narrows the board to. */
+  readonly quickProjectKeys: readonly string[];
+  readonly archivedOpen: boolean;
+}
+
+interface QuickProject {
+  readonly project: BoardProject;
+  readonly threadCount: number;
+}
+
+const ALL_PROJECTS = "";
+
+export const DEFAULT_BOARD_FILTERS: BoardFilters = {
+  projectKey: ALL_PROJECTS,
+  quickProjectKeys: [],
+  archivedOpen: false,
+};
+
 /** Each copy of a project, by `environmentId:projectId`, to the project it belongs to. */
-export function indexBoardProjects(
-  projects: readonly BoardProject[],
-): ReadonlyMap<string, BoardProject> {
+function indexBoardProjects(projects: readonly BoardProject[]): ReadonlyMap<string, BoardProject> {
   const projectByMemberKey = new Map<string, BoardProject>();
   for (const project of projects) {
     for (const member of project.memberProjects) {
@@ -40,19 +57,14 @@ export function indexBoardProjects(
   return projectByMemberKey;
 }
 
-export function resolveThreadBoardProject(
+function resolveThreadBoardProject(
   thread: Pick<ThreadBoardThread, "environmentId" | "projectId">,
   projectByMemberKey: ReadonlyMap<string, BoardProject>,
 ): BoardProject | undefined {
   return projectByMemberKey.get(`${thread.environmentId}:${thread.projectId}`);
 }
 
-interface QuickProject {
-  readonly project: BoardProject;
-  readonly threadCount: number;
-}
-
-/** The projects that have a thread on the board, the one with the most threads first. */
+/** The projects of the given threads, the one with the most threads first. */
 function listQuickProjects(
   threads: readonly ThreadBoardThread[],
   projectByMemberKey: ReadonlyMap<string, BoardProject>,
@@ -70,39 +82,47 @@ function listQuickProjects(
   );
 }
 
-/** The one project the quick filter shows, which a new ticket then goes to. */
-function soleQuickProject(
-  quickProjects: readonly QuickProject[],
-  quickProjectKeys: ReadonlySet<string>,
-): BoardProject | undefined {
-  if (quickProjectKeys.size !== 1) return undefined;
-  return quickProjects.find(({ project }) => quickProjectKeys.has(project.projectKey))?.project;
-}
-
-function isThreadOfQuickProject(
+function isThreadOfProjects(
   thread: ThreadBoardThread,
   projectByMemberKey: ReadonlyMap<string, BoardProject>,
-  quickProjectKeys: ReadonlySet<string>,
+  projectKeys: ReadonlySet<string>,
 ): boolean {
   const project = resolveThreadBoardProject(thread, projectByMemberKey);
   if (project === undefined) return false;
-  return quickProjectKeys.has(project.projectKey);
+  return projectKeys.has(project.projectKey);
+}
+
+/** The one project the filters show, when a ticket can be made in it. */
+function resolveFilteredTicketProject(input: {
+  scopedProject: BoardProject | undefined;
+  quickProjects: readonly QuickProject[];
+  quickProjectKeys: ReadonlySet<string>;
+}): BoardProject | undefined {
+  if (input.scopedProject) {
+    return input.scopedProject.isScratch ? undefined : input.scopedProject;
+  }
+  if (input.quickProjectKeys.size !== 1) return undefined;
+  const sole = input.quickProjects.find(({ project }) =>
+    input.quickProjectKeys.has(project.projectKey),
+  );
+  if (sole === undefined || sole.project.isScratch) return undefined;
+  return sole.project;
+}
+
+function resolveTicketProject(input: {
+  filteredProject: BoardProject | undefined;
+  projects: readonly BoardProject[];
+  pickedProjectKey: string | null;
+}): BoardProject | undefined {
+  if (input.filteredProject) return input.filteredProject;
+  const picked = input.projects.find((project) => project.projectKey === input.pickedProjectKey);
+  if (picked) return picked;
+  return input.projects[0];
 }
 
 function ticketStageOfColumn(column: ThreadBoardColumn): ThreadTicketStage | null {
   if (column === "backlog" || column === "ready") return column;
   return null;
-}
-
-function resolveTicketProject(input: {
-  scopedProject: BoardProject | undefined;
-  projects: readonly BoardProject[];
-  pickedProjectKey: string | null;
-}): BoardProject | undefined {
-  if (input.scopedProject) return input.scopedProject;
-  const picked = input.projects.find((project) => project.projectKey === input.pickedProjectKey);
-  if (picked) return picked;
-  return input.projects[0];
 }
 
 function ThreadBoardCard(props: {
@@ -113,6 +133,7 @@ function ThreadBoardCard(props: {
   now: string;
   onOpen: (thread: ThreadBoardThread) => void;
   onMove: (thread: ThreadBoardThread, to: ThreadBoardColumn) => void;
+  onDelete: (thread: ThreadBoardThread) => void;
   onDragStart: (thread: ThreadBoardThread) => void;
   onDragEnd: () => void;
 }) {
@@ -147,7 +168,9 @@ function ThreadBoardCard(props: {
         </button>
         <Menu>
           <MenuTrigger
-            render={<Button size="icon-xs" variant="ghost" aria-label={`Move ${thread.title}`} />}
+            render={
+              <Button size="icon-xs" variant="ghost" aria-label={`Actions for ${thread.title}`} />
+            }
             className="shrink-0"
           >
             <EllipsisIcon />
@@ -158,6 +181,10 @@ function ThreadBoardCard(props: {
                 Move to {THREAD_BOARD_COLUMN_LABELS[target]}
               </MenuItem>
             ))}
+            <MenuSeparator />
+            <MenuItem variant="destructive" onClick={() => props.onDelete(thread)}>
+              Delete
+            </MenuItem>
           </MenuPopup>
         </Menu>
       </div>
@@ -184,21 +211,26 @@ function ThreadBoardCard(props: {
 
 function NewTicketForm(props: {
   stage: ThreadTicketStage;
+  /** Projects a ticket can be made in. */
   projects: readonly BoardProject[];
-  scopedProject: BoardProject | undefined;
+  /** The one project the filters show; the form then asks for no project. */
+  filteredProject: BoardProject | undefined;
   onCreate: (project: BoardProject, title: string, stage: ThreadTicketStage) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [pickedProjectKey, setPickedProjectKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const stageLabel = THREAD_BOARD_COLUMN_LABELS[props.stage];
   const pickedProject = resolveTicketProject({
-    scopedProject: props.scopedProject,
+    filteredProject: props.filteredProject,
     projects: props.projects,
     pickedProjectKey,
   });
   const trimmedTitle = title.trim();
   const cannotSubmit = trimmedTitle.length === 0 || pickedProject === undefined || submitting;
+  const asksForProject =
+    props.filteredProject === undefined && pickedProject !== undefined && title.length > 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -210,26 +242,27 @@ function NewTicketForm(props: {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-1.5">
+    <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
         <Input
           size="sm"
           value={title}
+          disabled={props.projects.length === 0}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="New ticket"
-          aria-label={`New ${THREAD_BOARD_COLUMN_LABELS[props.stage]} ticket`}
+          aria-label={`New ${stageLabel} ticket`}
         />
         <Button
           type="submit"
           size="icon-sm"
           variant="outline"
-          aria-label={`Add ${THREAD_BOARD_COLUMN_LABELS[props.stage]} ticket`}
+          aria-label={`Add ${stageLabel} ticket`}
           disabled={cannotSubmit}
         >
           <PlusIcon />
         </Button>
       </div>
-      {props.scopedProject === undefined && pickedProject && title.length > 0 ? (
+      {asksForProject ? (
         <select
           value={pickedProject.projectKey}
           onChange={(event) => setPickedProjectKey(event.target.value)}
@@ -248,40 +281,62 @@ function NewTicketForm(props: {
 }
 
 export function ThreadBoard(props: {
-  /** Every thread of the shown scope, archived ones too. */
+  /** Every thread the lists show, archived ones too. */
   threads: readonly ThreadBoardThread[];
-  /** Projects a ticket can be made in. */
+  /** Projects the global filter offers. */
   projects: readonly BoardProject[];
   /** Every project, to name the cards of archived projects too. */
   allProjects: readonly BoardProject[];
-  scopedProject: BoardProject | undefined;
+  filters: BoardFilters;
   now: string;
-  onProjectChange: (projectKey: string) => void;
+  onFiltersChange: (filters: BoardFilters) => void;
   onOpen: (thread: ThreadBoardThread) => void;
   onMove: (thread: ThreadBoardThread, to: ThreadBoardColumn) => void;
+  onDelete: (thread: ThreadBoardThread) => void;
   onCreate: (project: BoardProject, title: string, stage: ThreadTicketStage) => Promise<void>;
 }) {
   const [draggedThread, setDraggedThread] = useState<ThreadBoardThread | null>(null);
   const [dropColumn, setDropColumn] = useState<ThreadBoardColumn | null>(null);
-  const [archivedOpen, setArchivedOpen] = useState(false);
-  const [quickProjectKeys, setQuickProjectKeys] = useState<ReadonlySet<string>>(new Set());
 
-  const { now, scopedProject } = props;
+  const { now, filters } = props;
   const projectByMemberKey = indexBoardProjects(props.allProjects);
-  const quickProjects = scopedProject ? [] : listQuickProjects(props.threads, projectByMemberKey);
-  const shownQuickProjectKeys = new Set(
+  const scopedProject = props.projects.find((project) => project.projectKey === filters.projectKey);
+  const scopedThreads = scopedProject
+    ? props.threads.filter((thread) =>
+        isThreadOfProjects(thread, projectByMemberKey, new Set([scopedProject.projectKey])),
+      )
+    : props.threads;
+  // A collapsed Archived column shows no card, so its threads are not counted.
+  const countedThreads = filters.archivedOpen
+    ? scopedThreads
+    : scopedThreads.filter((thread) => thread.archivedAt === null);
+  const quickProjects = scopedProject ? [] : listQuickProjects(countedThreads, projectByMemberKey);
+  const quickProjectKeys = new Set(
     quickProjects
       .map(({ project }) => project.projectKey)
-      .filter((key) => quickProjectKeys.has(key)),
+      .filter((key) => filters.quickProjectKeys.includes(key)),
   );
   const shownThreads =
-    shownQuickProjectKeys.size === 0
-      ? props.threads
-      : props.threads.filter((thread) =>
-          isThreadOfQuickProject(thread, projectByMemberKey, shownQuickProjectKeys),
+    quickProjectKeys.size === 0
+      ? scopedThreads
+      : scopedThreads.filter((thread) =>
+          isThreadOfProjects(thread, projectByMemberKey, quickProjectKeys),
         );
   const columns = groupThreadsByBoardColumn(shownThreads, { now });
-  const ticketProject = scopedProject ?? soleQuickProject(quickProjects, shownQuickProjectKeys);
+  const ticketProjects = props.projects.filter((project) => !project.isScratch);
+  const filteredTicketProject = resolveFilteredTicketProject({
+    scopedProject,
+    quickProjects,
+    quickProjectKeys,
+  });
+  const isFiltered = scopedProject !== undefined || quickProjectKeys.size > 0;
+
+  const handleQuickProjectToggle = (key: string, pressed: boolean) => {
+    const next = new Set(quickProjectKeys);
+    if (pressed) next.add(key);
+    else next.delete(key);
+    props.onFiltersChange({ ...filters, quickProjectKeys: [...next] });
+  };
 
   const handleDragOver = (event: DragEvent<HTMLElement>, column: ThreadBoardColumn) => {
     if (draggedThread === null) return;
@@ -304,21 +359,20 @@ export function ThreadBoard(props: {
     setDropColumn(null);
   };
 
-  const handleQuickProjectToggle = (key: string, pressed: boolean) => {
-    const next = new Set(shownQuickProjectKeys);
-    if (pressed) next.add(key);
-    else next.delete(key);
-    setQuickProjectKeys(next);
-  };
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-3 px-4 pt-3">
         <select
           value={scopedProject ? scopedProject.projectKey : ALL_PROJECTS}
-          onChange={(event) => props.onProjectChange(event.target.value)}
+          onChange={(event) =>
+            props.onFiltersChange({
+              ...filters,
+              projectKey: event.target.value,
+              quickProjectKeys: [],
+            })
+          }
           aria-label="Project"
-          className="h-7 max-w-64 rounded-md border bg-background px-1.5 text-sm"
+          className="h-7 max-w-64 shrink-0 rounded-md border bg-background px-1.5 text-sm"
         >
           <option value={ALL_PROJECTS}>All projects</option>
           {props.projects.map((project) => (
@@ -339,7 +393,7 @@ export function ThreadBoard(props: {
                 size="xs"
                 variant="outline"
                 aria-label={`${project.displayName}, ${threadCount} ${threadCount === 1 ? "thread" : "threads"}`}
-                pressed={shownQuickProjectKeys.has(project.projectKey)}
+                pressed={quickProjectKeys.has(project.projectKey)}
                 onPressedChange={(pressed) => handleQuickProjectToggle(project.projectKey, pressed)}
               >
                 <ProjectFavicon project={project} className="size-3.5 shrink-0" />
@@ -349,11 +403,23 @@ export function ThreadBoard(props: {
             ))}
           </div>
         ) : null}
+        {isFiltered ? (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="shrink-0"
+            onClick={() =>
+              props.onFiltersChange({ ...filters, projectKey: ALL_PROJECTS, quickProjectKeys: [] })
+            }
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
         {THREAD_BOARD_COLUMNS.map((column) => {
           const threads = columns[column];
-          const collapsed = column === "archived" && !archivedOpen;
+          const collapsed = column === "archived" && !filters.archivedOpen;
           const ticketStage = ticketStageOfColumn(column);
           return (
             <section
@@ -374,10 +440,12 @@ export function ThreadBoard(props: {
                   <Button
                     size="icon-xs"
                     variant="ghost"
-                    aria-label={archivedOpen ? "Collapse Archived" : "Expand Archived"}
-                    onClick={() => setArchivedOpen(!archivedOpen)}
+                    aria-label={filters.archivedOpen ? "Collapse Archived" : "Expand Archived"}
+                    onClick={() =>
+                      props.onFiltersChange({ ...filters, archivedOpen: !filters.archivedOpen })
+                    }
                   >
-                    <ChevronRightIcon className={cn(archivedOpen && "rotate-90")} />
+                    <ChevronRightIcon className={cn(filters.archivedOpen && "rotate-90")} />
                   </Button>
                 ) : null}
                 <span>{THREAD_BOARD_COLUMN_LABELS[column]}</span>
@@ -386,13 +454,16 @@ export function ThreadBoard(props: {
               {ticketStage ? (
                 <NewTicketForm
                   stage={ticketStage}
-                  projects={props.projects}
-                  scopedProject={ticketProject}
+                  projects={ticketProjects}
+                  filteredProject={filteredTicketProject}
                   onCreate={props.onCreate}
                 />
               ) : null}
               {collapsed ? null : (
                 <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+                  {threads.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-muted-foreground">No threads</p>
+                  ) : null}
                   {threads.map((thread) => (
                     <ThreadBoardCard
                       key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
@@ -403,6 +474,7 @@ export function ThreadBoard(props: {
                       now={now}
                       onOpen={props.onOpen}
                       onMove={props.onMove}
+                      onDelete={props.onDelete}
                       onDragStart={setDraggedThread}
                       onDragEnd={handleDragEnd}
                     />

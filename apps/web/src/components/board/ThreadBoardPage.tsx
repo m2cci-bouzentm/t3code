@@ -2,6 +2,7 @@ import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environ
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
+  settlePromise,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
@@ -13,10 +14,13 @@ import type {
   ThreadTicketStage,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import * as Schema from "effect/Schema";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useNowMinute } from "../../hooks/useNowMinute";
+import { useClientSettings } from "../../hooks/useSettings";
 import { useSidebarProjectGroups } from "../../hooks/useSidebarProjectGroups";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import {
@@ -24,6 +28,7 @@ import {
   useArchivedThreadSnapshots,
 } from "../../lib/archivedThreadsState";
 import { newThreadId } from "../../lib/utils";
+import { readLocalApi } from "../../localApi";
 import { resolveProjectDefaultProviderModelSelection } from "../../providerInstances";
 import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../../state/entities";
 import { environmentPresentations } from "../../state/presentation";
@@ -34,13 +39,7 @@ import { buildThreadRouteParams } from "../../threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import {
-  ALL_PROJECTS,
-  indexBoardProjects,
-  resolveThreadBoardProject,
-  ThreadBoard,
-  type BoardProject,
-} from "./ThreadBoard";
+import { DEFAULT_BOARD_FILTERS, ThreadBoard, type BoardProject } from "./ThreadBoard";
 import {
   planThreadBoardMove,
   THREAD_BOARD_COLUMN_LABELS,
@@ -49,11 +48,6 @@ import {
   type ThreadBoardThread,
 } from "./threadBoard.logic";
 
-export interface ThreadBoardSearch {
-  /** `environmentId:projectId`; absent shows every project. */
-  readonly project?: string;
-}
-
 interface TicketDefaults {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
@@ -61,6 +55,14 @@ interface TicketDefaults {
 
 type BoardCommandResult = AtomCommandResult<unknown, unknown>;
 type BoardCommandFailure = Extract<BoardCommandResult, { readonly _tag: "Failure" }>;
+
+const BOARD_FILTERS_KEY = "t3code:board:filters";
+
+const BoardFiltersSchema = Schema.Struct({
+  projectKey: Schema.String,
+  quickProjectKeys: Schema.Array(Schema.String),
+  archivedOpen: Schema.Boolean,
+});
 
 function reportBoardFailure(title: string, result: BoardCommandFailure) {
   const error = squashAtomCommandFailure(result);
@@ -97,26 +99,35 @@ function resolveTicketDefaults(project: BoardProject): TicketDefaults | null {
 }
 
 export function ThreadBoardPage() {
-  const search = useSearch({ from: "/_chat/board" });
+  const [filters, setFilters] = useLocalStorage(
+    BOARD_FILTERS_KEY,
+    DEFAULT_BOARD_FILTERS,
+    BoardFiltersSchema,
+  );
   const navigate = useNavigate();
   const nowMinute = useNowMinute();
   const liveThreads = useQuietThreadShells();
   const delegatedUnderParent = useDelegatedUnderParent();
   const environmentProjects = useProjects();
   const allProjects = useSidebarProjectGroups();
-  const { settleThread, unsettleThread, unsnoozeThread, archiveThread, unarchiveThread } =
-    useThreadActions();
+  const confirmThreadArchive = useClientSettings((settings) => settings.confirmThreadArchive);
+  const {
+    settleThread,
+    unsettleThread,
+    unsnoozeThread,
+    archiveThread,
+    unarchiveThread,
+    confirmAndDeleteThread,
+  } = useThreadActions();
   const stageThread = useOrchestrationCommand(threadEnvironment.stage, { reportFailure: false });
   const createThread = useOrchestrationCommand(threadEnvironment.create, { reportFailure: false });
 
   const now = `${nowMinute}:00Z`;
   const projects = pickableProjectGroups(allProjects);
-  const projectByMemberKey = indexBoardProjects(allProjects);
   const environmentIds: EnvironmentId[] = [
     ...new Set(environmentProjects.map((project) => project.environmentId)),
   ];
   const { snapshots: archivedSnapshots } = useArchivedThreadSnapshots(environmentIds);
-  const scopedProject = projects.find((project) => project.projectKey === search.project);
   const liveThreadKeys = new Set(
     liveThreads.map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
   );
@@ -135,11 +146,6 @@ export function ThreadBoardPage() {
         thread.lineage,
         delegatedUnderParent,
       ),
-  );
-  const boardThreads = listedThreads.filter(
-    (thread) =>
-      scopedProject === undefined ||
-      resolveThreadBoardProject(thread, projectByMemberKey) === scopedProject,
   );
 
   const runStep = (step: ThreadBoardStep, thread: ThreadBoardThread) => {
@@ -168,13 +174,37 @@ export function ThreadBoardPage() {
     }
   };
 
+  const isArchiveConfirmed = async (thread: ThreadBoardThread) => {
+    const localApi = readLocalApi();
+    if (!confirmThreadArchive || !localApi) return true;
+    const confirmed = await settlePromise(() =>
+      localApi.dialogs.confirm(`Archive thread "${thread.title}"?`),
+    );
+    return confirmed._tag === "Success" && confirmed.value;
+  };
+
   const moveThread = async (thread: ThreadBoardThread, to: ThreadBoardColumn) => {
-    for (const step of planThreadBoardMove(thread, to, { now })) {
+    const steps = planThreadBoardMove(thread, to, { now });
+    if (steps.includes("archive")) {
+      const confirmed = await isArchiveConfirmed(thread);
+      if (!confirmed) return;
+    }
+    for (const step of steps) {
       const result: BoardCommandResult = await runStep(step, thread);
       if (result._tag === "Failure") {
         reportBoardFailure(`Failed to move thread to ${THREAD_BOARD_COLUMN_LABELS[to]}`, result);
         return;
       }
+    }
+    refreshArchivedThreadsForEnvironment(thread.environmentId);
+  };
+
+  const deleteThread = async (thread: ThreadBoardThread) => {
+    const target = scopeThreadRef(thread.environmentId, thread.id);
+    const result: BoardCommandResult = await confirmAndDeleteThread(target, thread.title);
+    if (result._tag === "Failure") {
+      reportBoardFailure("Failed to delete thread", result);
+      return;
     }
     refreshArchivedThreadsForEnvironment(thread.environmentId);
   };
@@ -216,14 +246,6 @@ export function ThreadBoardPage() {
     if (staged._tag === "Failure") reportBoardFailure("Failed to add ticket", staged);
   };
 
-  const handleProjectChange = (nextProjectKey: string) => {
-    void navigate({
-      to: "/board",
-      search: nextProjectKey === ALL_PROJECTS ? {} : { project: nextProjectKey },
-      replace: true,
-    });
-  };
-
   const handleOpenThread = (thread: ThreadBoardThread) => {
     void navigate({
       to: "/$environmentId/$threadId",
@@ -240,14 +262,15 @@ export function ThreadBoardPage() {
           <AppRouteModalClose />
         </header>
         <ThreadBoard
-          threads={boardThreads}
+          threads={listedThreads}
           projects={projects}
           allProjects={allProjects}
-          scopedProject={scopedProject}
+          filters={filters}
           now={now}
-          onProjectChange={handleProjectChange}
+          onFiltersChange={setFilters}
           onOpen={handleOpenThread}
           onMove={moveThread}
+          onDelete={deleteThread}
           onCreate={createTicket}
         />
       </div>
