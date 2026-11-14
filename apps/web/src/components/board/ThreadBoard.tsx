@@ -1,6 +1,7 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
 import type { ThreadTicketStage } from "@t3tools/contracts";
-import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, ClockIcon, EllipsisIcon, PlusIcon } from "lucide-react";
 import { Fragment, useState, type DragEvent, type FormEvent } from "react";
 
 import { cn } from "../../lib/utils";
@@ -8,9 +9,20 @@ import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { resolveThreadStatusPill } from "../Sidebar.logic";
+import type { SnoozePreset } from "../Sidebar.snooze";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuItemDetail,
+  MenuPopup,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "../ui/menu";
 import { Toggle } from "../ui/toggle";
 import {
   groupThreadsByBoardColumn,
@@ -47,6 +59,13 @@ type BoardMoveHandler = (
   thread: ThreadBoardThread,
   to: ThreadBoardColumn,
   order: readonly ThreadBoardOrderAssignment[],
+) => void;
+
+/** `preset` is one of the shown `presets`; null asks for a custom time. */
+type BoardSnoozeHandler = (
+  thread: ThreadBoardThread,
+  presets: readonly SnoozePreset[],
+  preset: SnoozePreset | null,
 ) => void;
 
 interface QuickProject {
@@ -150,6 +169,35 @@ function BoardDropLine() {
   );
 }
 
+/** The snooze times of a thread, read when its menu opens. */
+function BoardSnoozeMenu(props: {
+  thread: ThreadBoardThread;
+  listSnoozePresets: (thread: ThreadBoardThread) => readonly SnoozePreset[];
+  onSnooze: BoardSnoozeHandler;
+}) {
+  const { thread } = props;
+  const presets = props.listSnoozePresets(thread);
+
+  return (
+    <MenuSub>
+      <MenuSubTrigger>
+        <ClockIcon />
+        Snooze
+      </MenuSubTrigger>
+      <MenuSubPopup>
+        {presets.map((preset) => (
+          <MenuItem key={preset.id} onClick={() => props.onSnooze(thread, presets, preset)}>
+            {preset.label}
+            <MenuItemDetail>{preset.whenLabel}</MenuItemDetail>
+          </MenuItem>
+        ))}
+        {presets.length > 0 ? <MenuSeparator /> : null}
+        <MenuItem onClick={() => props.onSnooze(thread, presets, null)}>Custom…</MenuItem>
+      </MenuSubPopup>
+    </MenuSub>
+  );
+}
+
 function ThreadBoardCard(props: {
   thread: ThreadBoardThread;
   column: ThreadBoardColumn;
@@ -157,7 +205,9 @@ function ThreadBoardCard(props: {
   showProject: boolean;
   now: string;
   onOpen: (thread: ThreadBoardThread) => void;
+  listSnoozePresets: (thread: ThreadBoardThread) => readonly SnoozePreset[];
   onMove: BoardMoveHandler;
+  onSnooze: BoardSnoozeHandler;
   onDelete: (thread: ThreadBoardThread) => void;
   onDragStart: (thread: ThreadBoardThread) => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
@@ -168,6 +218,8 @@ function ThreadBoardCard(props: {
   const moveTargets = THREAD_BOARD_COLUMNS.filter(
     (target) => planThreadBoardMove(thread, target, { now: props.now }).length > 0,
   );
+
+  const canSnoozeThread = column !== "archived" && canSnooze(thread, { now: props.now });
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     event.dataTransfer.effectAllowed = "move";
@@ -208,6 +260,13 @@ function ThreadBoardCard(props: {
                 Move to {THREAD_BOARD_COLUMN_LABELS[target]}
               </MenuItem>
             ))}
+            {canSnoozeThread ? (
+              <BoardSnoozeMenu
+                thread={thread}
+                listSnoozePresets={props.listSnoozePresets}
+                onSnooze={props.onSnooze}
+              />
+            ) : null}
             <MenuSeparator />
             <MenuItem variant="destructive" onClick={() => props.onDelete(thread)}>
               Delete
@@ -320,6 +379,9 @@ export function ThreadBoard(props: {
   onOpen: (thread: ThreadBoardThread) => void;
   /** `order` holds the order keys that put the thread at the place of the drop. */
   onMove: BoardMoveHandler;
+  /** The snooze times the menu of a thread offers. */
+  listSnoozePresets: (thread: ThreadBoardThread) => readonly SnoozePreset[];
+  onSnooze: BoardSnoozeHandler;
   onDelete: (thread: ThreadBoardThread) => void;
   onCreate: (project: BoardProject, title: string, stage: ThreadTicketStage) => Promise<void>;
 }) {
@@ -534,7 +596,9 @@ export function ThreadBoard(props: {
                         showProject={scopedProject === undefined}
                         now={now}
                         onOpen={props.onOpen}
+                        listSnoozePresets={props.listSnoozePresets}
                         onMove={props.onMove}
+                        onSnooze={props.onSnooze}
                         onDelete={props.onDelete}
                         onDragStart={setDraggedThread}
                         onDragOver={(event) => handleCardDragOver(event, column, cardIndex)}

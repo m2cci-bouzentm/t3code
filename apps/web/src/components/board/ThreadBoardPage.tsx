@@ -38,6 +38,8 @@ import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
+import { requestCustomSnooze } from "../CustomSnoozeDialog";
+import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { DEFAULT_BOARD_FILTERS, ThreadBoard, type BoardProject } from "./ThreadBoard";
 import {
@@ -112,9 +114,11 @@ export function ThreadBoardPage() {
   const environmentProjects = useProjects();
   const allProjects = useSidebarProjectGroups();
   const confirmThreadArchive = useClientSettings((settings) => settings.confirmThreadArchive);
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const {
     settleThread,
     unsettleThread,
+    snoozeThread,
     unsnoozeThread,
     archiveThread,
     unarchiveThread,
@@ -213,6 +217,23 @@ export function ThreadBoardPage() {
     refreshArchivedThreadsForEnvironment(thread.environmentId);
   };
 
+  const listSnoozePresets = (thread: ThreadBoardThread) =>
+    resolveSnoozePresets(new Date(), timestampFormat, thread.environmentId);
+
+  const snoozeBoardThread = async (
+    thread: ThreadBoardThread,
+    presets: readonly SnoozePreset[],
+    preset: SnoozePreset | null,
+  ) => {
+    const choice = preset
+      ? pickSnoozePreset(presets, preset.id, timestampFormat, thread.environmentId)
+      : await requestCustomSnooze();
+    if (!choice) return;
+    const target = scopeThreadRef(thread.environmentId, thread.id);
+    const result: BoardCommandResult = await snoozeThread(target, choice.snoozedUntil);
+    if (result._tag === "Failure") reportBoardFailure("Failed to snooze thread", result);
+  };
+
   const deleteThread = async (thread: ThreadBoardThread) => {
     const target = scopeThreadRef(thread.environmentId, thread.id);
     const result: BoardCommandResult = await confirmAndDeleteThread(target, thread.title);
@@ -284,6 +305,8 @@ export function ThreadBoardPage() {
           onFiltersChange={setFilters}
           onOpen={handleOpenThread}
           onMove={moveThread}
+          listSnoozePresets={listSnoozePresets}
+          onSnooze={snoozeBoardThread}
           onDelete={deleteThread}
           onCreate={createTicket}
         />

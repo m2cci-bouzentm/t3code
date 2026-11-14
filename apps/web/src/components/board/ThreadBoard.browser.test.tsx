@@ -88,12 +88,17 @@ const SCRATCH_THREAD = makeThread({
   title: "Quick question",
 });
 
+const SNOOZE_PRESETS = [
+  { id: "1h", label: "In 1 hour", whenLabel: "11:00", snoozedUntil: "2026-11-14T11:00:00.000Z" },
+];
+
 const ALL_THREADS = [...THREADS, OTHER_THREAD, MAC_THREAD, ARCHIVED_THREAD, SCRATCH_THREAD];
 const ALL_PROJECT_LIST = [PROJECT, OTHER_PROJECT, SCRATCH_PROJECT];
 
 function makeHandlers() {
   return {
     onMove: vi.fn(),
+    onSnooze: vi.fn(),
     onDelete: vi.fn(),
     onOpen: vi.fn(),
     onCreate: vi.fn(async () => {}),
@@ -115,6 +120,7 @@ function BoardHarness(props: {
       filters={filters}
       now={NOW}
       onFiltersChange={setFilters}
+      listSnoozePresets={() => SNOOZE_PRESETS}
       {...props.handlers}
     />
   );
@@ -237,6 +243,25 @@ describe("ThreadBoard", () => {
       lower,
       upper,
     ]);
+  });
+
+  it("snoozes a thread from its menu, with a preset or a custom time", async () => {
+    const { board, handlers } = renderBoard();
+    await using screen = await render(board, { router: false });
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for Fix the login bug" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Snooze" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /In 1 hour/ }));
+    expect(handlers.onSnooze).toHaveBeenLastCalledWith(
+      THREADS[1],
+      SNOOZE_PRESETS,
+      SNOOZE_PRESETS[0],
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for Fix the login bug" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Snooze" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Custom…" }));
+    expect(handlers.onSnooze).toHaveBeenLastCalledWith(THREADS[1], SNOOZE_PRESETS, null);
   });
 
   it("opens a thread from its title", async () => {
