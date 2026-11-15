@@ -43,6 +43,7 @@ import {
 } from "./auth.ts";
 import {
   ExecutionEnvironmentDescriptor,
+  CLIENT_CAPABILITIES_HEADER,
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
 } from "./environment.ts";
@@ -104,6 +105,7 @@ const OrchestrationProtocolHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
   dpop: Schema.optionalKey(Schema.String),
   [ORCHESTRATION_PROTOCOL_HEADER]: Schema.Literal(ORCHESTRATION_PROTOCOL_VERSION_TEXT),
+  [CLIENT_CAPABILITIES_HEADER]: Schema.optionalKey(Schema.String),
 });
 
 const OptionalDpopProofHeaders = Schema.Struct({

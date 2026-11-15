@@ -19,6 +19,14 @@ export const ORCHESTRATION_PROTOCOL_HEADER = "x-t3-orchestration-protocol";
 export const CLIENT_CAPABILITIES_QUERY_PARAM = "clientCapabilities";
 /** Secret fields may hold a secret provider reference instead of a string. */
 export const SETTINGS_SECRET_REFERENCES_CAPABILITY = "settingsSecretReferences";
+/** The same list on an HTTP request. */
+export const CLIENT_CAPABILITIES_HEADER = "x-t3-client-capabilities";
+/** A thread's stored stage may be a ticket stage. */
+export const THREAD_TICKET_STAGES_CAPABILITY = "threadTicketStages";
+export const CLIENT_CAPABILITIES_TEXT = [
+  SETTINGS_SECRET_REFERENCES_CAPABILITY,
+  THREAD_TICKET_STAGES_CAPABILITY,
+].join(",");
 
 export const ExecutionEnvironmentPlatformOs = Schema.Literals([
   "darwin",

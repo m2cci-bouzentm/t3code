@@ -4,6 +4,7 @@ import * as NodeCrypto from "node:crypto";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
+import * as TicketStageCompat from "./orchestration-v2/TicketStageCompat.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 
@@ -3664,11 +3665,20 @@ export const layer = Layer.unwrap(
               ),
             )
           : rpcWebSocketHttpEffect;
+        const clientRpcWebSocketHttpEffect = TicketStageCompat.isSocketClientWithoutTicketStages(
+          url.value,
+        )
+          ? TicketStageCompat.serveSocketClientWithoutTicketStages(
+              rpcWebSocketHttpEffect,
+              request,
+              url.value,
+            )
+          : framedRpcWebSocketHttpEffect;
         return yield* Effect.acquireUseRelease(
           sessions.markConnected(session.sessionId),
           () =>
             Effect.raceFirst(
-              framedRpcWebSocketHttpEffect,
+              clientRpcWebSocketHttpEffect,
               sessions.awaitInvalidation(session.sessionId, session.proofKeyThumbprint).pipe(
                 Effect.as(HttpServerResponse.empty()),
                 Effect.catchTags({

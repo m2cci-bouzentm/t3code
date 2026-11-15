@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
+  CLIENT_CAPABILITIES_HEADER,
+  CLIENT_CAPABILITIES_TEXT,
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
 } from "@t3tools/contracts";
@@ -31,10 +33,12 @@ export function withOrchestrationProtocolHeader(
   headers: EnvironmentHttpAuthHeaders,
 ): EnvironmentHttpAuthHeaders & {
   readonly [ORCHESTRATION_PROTOCOL_HEADER]: typeof ORCHESTRATION_PROTOCOL_VERSION_TEXT;
+  readonly [CLIENT_CAPABILITIES_HEADER]: string;
 } {
   return {
     ...headers,
     [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+    [CLIENT_CAPABILITIES_HEADER]: CLIENT_CAPABILITIES_TEXT,
   };
 }
 
