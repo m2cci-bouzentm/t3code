@@ -9,6 +9,7 @@ import {
   type EnvironmentId,
   type MessageId,
   type OrchestrationV2TurnItem,
+  type ProjectId,
   type RunAttemptId,
   type ScopedThreadRef,
   type ServerProviderSkill,
@@ -41,6 +42,23 @@ export interface TurnItemSource {
     readonly threadId: ThreadId;
     readonly itemId: TurnItemId;
   }) => Atom.Atom<AsyncResult.AsyncResult<CommandOutputView, unknown>>;
+}
+
+/** A machine that has the project of the thread, other than the machine of the thread. */
+export interface ForkEnvironment {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly label: string;
+}
+
+/** A fork on another machine starts a new thread there from a copy of the history. */
+export interface OtherMachineFork {
+  readonly environments: ReadonlyArray<ForkEnvironment>;
+  readonly fork: (input: {
+    readonly sourceThreadId: ThreadId;
+    readonly runId: RunId;
+    readonly environment: ForkEnvironment;
+  }) => Promise<void>;
 }
 
 export interface TimelineRowSharedState {
@@ -90,6 +108,8 @@ export interface TimelineRowSharedState {
   onForkFromRun:
     | ((input: { readonly sourceThreadId: ThreadId; readonly runId: RunId }) => Promise<void>)
     | undefined;
+  /** Absent keeps "Fork from this response" on this machine only. */
+  otherMachineFork: OtherMachineFork | undefined;
   onToggleTurnFold: (runId: RunId) => void;
   onToggleAttemptFold: (attemptId: RunAttemptId) => void;
   onFileOpen: (attachment: ChatFileAttachment) => void;

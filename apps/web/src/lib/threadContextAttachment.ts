@@ -1,7 +1,16 @@
-import type { EnvironmentId, OrchestrationV2ThreadTranscript } from "@t3tools/contracts";
+import type { EnvironmentId, OrchestrationV2ThreadTranscript, RunId } from "@t3tools/contracts";
 import { toKindScopedComposerContextId } from "@t3tools/shared/composerContextReferences";
 import { threadTranscriptHeader } from "@t3tools/shared/threadTranscript";
 import * as DateTime from "effect/DateTime";
+
+/** The thread as it was when the run ended: the rows after that run are left out. */
+export function threadTranscriptThroughRun(
+  transcript: OrchestrationV2ThreadTranscript,
+  runId: RunId,
+): OrchestrationV2ThreadTranscript {
+  const lastRow = transcript.items.findLastIndex((row) => row.item.runId === runId);
+  return { ...transcript, items: transcript.items.slice(0, lastRow + 1) };
+}
 
 export function threadContextAttachment(
   environmentId: EnvironmentId,

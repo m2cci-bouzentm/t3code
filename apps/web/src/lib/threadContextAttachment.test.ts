@@ -1,9 +1,55 @@
-import { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
+import { EnvironmentId, RunId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeThreadProjectionFixture } from "../test-fixtures";
-import { threadContextAttachment } from "./threadContextAttachment";
+import { threadContextAttachment, threadTranscriptThroughRun } from "./threadContextAttachment";
+
+describe("threadTranscriptThroughRun", () => {
+  it("keeps the rows up to the end of the run and leaves out the later rows", () => {
+    const projection = makeThreadProjectionFixture();
+    const row = (position: number, runId: string | null) => {
+      const item = {
+        id: TurnItemId.make(`item-${position}`),
+        threadId: projection.thread.id,
+        runId: runId === null ? null : RunId.make(runId),
+        nodeId: null,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: position,
+        type: "dynamic_tool" as const,
+        status: "completed" as const,
+        title: "Read context",
+        startedAt: null,
+        completedAt: null,
+        updatedAt: projection.updatedAt,
+        toolName: "read",
+        input: {},
+        output: {},
+      };
+      return {
+        position,
+        visibility: "local" as const,
+        sourceThreadId: projection.thread.id,
+        sourceItemId: item.id,
+        item,
+      };
+    };
+    const transcript = {
+      threadId: projection.thread.id,
+      title: projection.thread.title,
+      updatedAt: projection.updatedAt,
+      items: [row(0, "run-1"), row(1, "run-1"), row(2, "run-2"), row(3, "run-2"), row(4, "run-3")],
+    };
+
+    const cut = threadTranscriptThroughRun(transcript, RunId.make("run-2"));
+
+    expect(cut.items.map((item) => item.position)).toEqual([0, 1, 2, 3]);
+    expect(cut.title).toBe(transcript.title);
+  });
+});
 
 describe("threadContextAttachment", () => {
   it("preserves full inherited history and structured context without exposing runtime state", async () => {

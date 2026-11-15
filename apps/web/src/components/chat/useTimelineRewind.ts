@@ -11,7 +11,7 @@ import {
   type ThreadId,
   type RunId,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
 import {
   isAtomCommandInterrupted,
@@ -20,7 +20,13 @@ import {
 import { readLocalApi } from "../../localApi";
 import { findRevertCheckpoint } from "../../session-logic";
 import { type ChatMessage } from "../../types";
-import { newThreadId } from "~/lib/utils";
+import { newThreadId, randomUUID } from "~/lib/utils";
+import { threadContextAttachment, threadTranscriptThroughRun } from "~/lib/threadContextAttachment";
+import { orchestrationEnvironment } from "~/state/orchestration";
+import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
+import type { EnvironmentOption } from "../BranchToolbar.logic";
+import { composerFileAttachmentMimeType } from "./composerAttachmentFiles";
+import type { ForkEnvironment, OtherMachineFork } from "./timelineRowContext";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { threadEnvironment } from "../../state/threads";
@@ -40,6 +46,7 @@ interface TimelineRewindInput {
   readonly currentRouteThreadKeyRef: { readonly current: string | null };
   readonly serverProjection: ThreadStructure | null;
   readonly activeThread: EnvironmentThreadShell | undefined;
+  readonly logicalProjectEnvironments: ReadonlyArray<EnvironmentOption>;
   readonly timelineMessages: ReadonlyArray<ChatMessage>;
   readonly phase: SessionPhase;
   readonly isSendBusy: boolean;
@@ -51,6 +58,23 @@ interface TimelineRewindInput {
   readonly composerRef: ComposerHandleRef;
   readonly composerDraftTarget: ComposerThreadTarget;
   readonly setThreadError: ReturnType<typeof makeThreadErrorSetter>;
+}
+
+function otherMachinesWithProject(
+  environments: ReadonlyArray<EnvironmentOption>,
+  environmentId: EnvironmentId,
+): ForkEnvironment[] {
+  return environments.flatMap((environment) =>
+    environment.environmentId === environmentId || environment.projectId === null
+      ? []
+      : [
+          {
+            environmentId: environment.environmentId,
+            projectId: environment.projectId,
+            label: environment.label,
+          },
+        ],
+  );
 }
 
 /**
@@ -65,6 +89,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     currentRouteThreadKeyRef,
     serverProjection,
     activeThread,
+    logicalProjectEnvironments,
     timelineMessages,
     phase,
     isSendBusy,
@@ -78,6 +103,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     setThreadError,
   } = input;
   const navigate = useNavigate();
+  const handleNewThread = useNewThreadHandler();
   const createAttachmentAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
     refresh: true,
@@ -87,6 +113,9 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     reportFailure: false,
   });
   const forkThreadFromRun = useAtomCommand(threadEnvironment.forkFromRun, {
+    reportFailure: false,
+  });
+  const loadThreadTranscript = useAtomCommand(orchestrationEnvironment.threadTranscript, {
     reportFailure: false,
   });
 
@@ -211,6 +240,55 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     });
   };
   const onForkFromRunStable = useStableCallback(onForkFromRun);
+
+  const onForkToEnvironment = async (forkInput: {
+    readonly sourceThreadId: ThreadId;
+    readonly runId: RunId;
+    readonly environment: ForkEnvironment;
+  }) => {
+    if (!activeThread || activeEnvironmentUnavailable) return;
+    const transcript = await loadThreadTranscript({
+      environmentId,
+      input: { threadId: forkInput.sourceThreadId },
+    });
+    if (transcript._tag === "Failure") {
+      if (!isAtomCommandInterrupted(transcript)) {
+        const error = squashAtomCommandFailure(transcript);
+        setThreadError(
+          activeThread.id,
+          error instanceof Error ? error.message : "Failed to read this thread for the fork.",
+        );
+      }
+      return;
+    }
+    const history = threadContextAttachment(
+      environmentId,
+      threadTranscriptThroughRun(transcript.value, forkInput.runId),
+    );
+    const draft = await handleNewThread(
+      scopeProjectRef(forkInput.environment.environmentId, forkInput.environment.projectId),
+    );
+    if (draft === null) return;
+    useComposerDraftStore.getState().addFiles(
+      draft.draftId,
+      [
+        {
+          type: "file",
+          id: randomUUID(),
+          name: history.name,
+          mimeType: composerFileAttachmentMimeType(history),
+          sizeBytes: history.size,
+          file: history,
+        },
+      ],
+      { appendReference: true },
+    );
+  };
+  const onForkToEnvironmentStable = useStableCallback(onForkToEnvironment);
+  const otherMachineFork: OtherMachineFork = {
+    environments: otherMachinesWithProject(logicalProjectEnvironments, environmentId),
+    fork: onForkToEnvironmentStable,
+  };
   const onRevertTimelineTurn = (targetTurnCount: number, messageId: MessageId) => {
     void onRevertToTurnCountStable(targetTurnCount, messageId);
   };
@@ -218,6 +296,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
   return {
     onConfirmRevertStable,
     onForkFromRunStable,
+    otherMachineFork,
     onRevertTimelineTurnStable,
   };
 }

@@ -9,6 +9,7 @@ import { GitForkIcon, ReplyIcon } from "lucide-react";
 import { captureAssistantMessageOpening } from "~/lib/assistantTextSelection";
 import { responseContextRecord } from "~/lib/composerContextRecords";
 import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
@@ -148,7 +149,43 @@ function AssistantForkButton({
 
   const onForkFromRun = ctx.onForkFromRun;
   if (!canFork || onForkFromRun === undefined || projectedItem.item.runId === null) return null;
-  const runId = projectedItem.item.runId;
+  const source = { sourceThreadId: projectedItem.sourceThreadId, runId: projectedItem.item.runId };
+  const otherMachineFork = ctx.otherMachineFork;
+  const trackFork = (fork: Promise<void>) => {
+    setBusy(true);
+    void fork.finally(() => setBusy(false));
+  };
+
+  if (otherMachineFork !== undefined && otherMachineFork.environments.length > 0) {
+    return (
+      <Menu>
+        <MenuTrigger
+          render={
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              disabled={busy}
+              aria-label="Fork from this response"
+            />
+          }
+        >
+          <GitForkIcon className={cn("size-3", busy && "animate-pulse")} />
+        </MenuTrigger>
+        <MenuPopup align="start">
+          <MenuItem onClick={() => trackFork(onForkFromRun(source))}>Fork on this machine</MenuItem>
+          {otherMachineFork.environments.map((environment) => (
+            <MenuItem
+              key={environment.environmentId}
+              onClick={() => trackFork(otherMachineFork.fork({ ...source, environment }))}
+            >
+              Fork on {environment.label}
+            </MenuItem>
+          ))}
+        </MenuPopup>
+      </Menu>
+    );
+  }
 
   return (
     <Tooltip>
@@ -159,12 +196,7 @@ function AssistantForkButton({
             size="xs"
             variant="ghost"
             disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void onForkFromRun({ sourceThreadId: projectedItem.sourceThreadId, runId }).finally(
-                () => setBusy(false),
-              );
-            }}
+            onClick={() => trackFork(onForkFromRun(source))}
             aria-label="Fork from this response"
           />
         }
