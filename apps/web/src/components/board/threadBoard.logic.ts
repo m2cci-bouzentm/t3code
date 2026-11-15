@@ -4,6 +4,7 @@ import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
 
 import type { SidebarThreadSummary } from "../../types";
 import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "../Sidebar.logic";
+import { resolveThreadStage } from "../threadStage";
 
 export const THREAD_BOARD_COLUMNS = [
   "backlog",
@@ -64,16 +65,13 @@ function threadBoardKey(thread: ThreadBoardThread): string {
   return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
 }
 
-/** Every thread has exactly one column; the first rule that matches wins. */
+/** Every thread has exactly one column: its stage, and an open thread is Active or Needs You. */
 export function resolveThreadBoardColumn(
   thread: ThreadBoardThread,
   options: { readonly now: string },
 ): ThreadBoardColumn {
-  if (thread.archivedAt !== null) return "archived";
-  if (effectiveSnoozed(thread, options)) return "snoozed";
-  if (thread.settledOverride === "settled") return "settled";
-  if (thread.settledOverride === "backlog") return "backlog";
-  if (thread.settledOverride === "ready") return "ready";
+  const stage = resolveThreadStage(thread, options);
+  if (stage !== "open") return stage;
   if (NEEDS_YOU_STATUSES.has(resolveSidebarThreadStatus(thread))) return "needs-you";
   return "active";
 }

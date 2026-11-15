@@ -39,6 +39,7 @@ import {
   type ThreadSortInput,
 } from "@t3tools/client-runtime/state/thread-sort";
 import type { SidebarThreadSummary, Thread } from "../types";
+import { resolveThreadStage } from "./threadStage";
 import { normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
 import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
@@ -590,8 +591,8 @@ export function isTicketThread(
   thread: SidebarThreadSummary,
   options: { readonly now: string },
 ): boolean {
-  const isStaged = thread.settledOverride === "backlog" || thread.settledOverride === "ready";
-  return isStaged && !effectiveSnoozed(thread, options);
+  const stage = resolveThreadStage(thread, options);
+  return stage === "backlog" || stage === "ready";
 }
 
 export function isSidebarHiddenThread(thread: Pick<SidebarThreadSummary, "lineage">): boolean {
