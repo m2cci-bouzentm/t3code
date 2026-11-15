@@ -2007,6 +2007,52 @@ it.effect("explicit settle clears snooze atomically and stays idempotent after r
   }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("a thread created with imported history shows it as rows of no run", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:imported-history");
+    const saidAt = yield* DateTime.now;
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-imported-history"),
+      threadId,
+      projectId: ProjectId.make("project:imported-history"),
+      title: "Source thread fork",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+      importedHistory: [
+        { role: "user", text: "Find the bug", createdAt: saidAt },
+        { role: "reasoning", text: "The loop ends early", createdAt: saidAt },
+        { role: "assistant", text: "The bug is in the loop", createdAt: saidAt },
+      ],
+    });
+
+    const projection = yield* projections.getThreadProjection(threadId);
+    assert.equal(projection.thread.historyOrigin, "v1_import");
+    assert.deepEqual(
+      projection.visibleTurnItems.map(({ item }) => [item.type, item.runId]),
+      [
+        ["user_message", null],
+        ["reasoning", null],
+        ["assistant_message", null],
+      ],
+    );
+    assert.deepEqual(
+      projection.messages.map((message) => [message.role, message.text]),
+      [
+        ["user", "Find the bug"],
+        ["assistant", "The bug is in the loop"],
+      ],
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("a ticket holds its stage until its first message makes it active", () =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;

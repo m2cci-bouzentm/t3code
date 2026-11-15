@@ -19,20 +19,22 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { readLocalApi } from "../../localApi";
 import { findRevertCheckpoint } from "../../session-logic";
-import { type ChatMessage } from "../../types";
-import { newThreadId, randomUUID } from "~/lib/utils";
-import { threadContextAttachment, threadTranscriptThroughRun } from "~/lib/threadContextAttachment";
+import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
+import { newThreadId } from "~/lib/utils";
+import { resolveNewThreadDefaults } from "~/lib/newThreadDefaults";
+import {
+  importedHistoryFromTranscript,
+  threadTranscriptThroughRun,
+} from "~/lib/threadContextAttachment";
 import { orchestrationEnvironment } from "~/state/orchestration";
-import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../hooks/useScratchProject";
 import { type EnvironmentPresentation, useEnvironments } from "../../state/environments";
 import type { EnvironmentOption } from "../BranchToolbar.logic";
-import { composerFileAttachmentMimeType } from "./composerAttachmentFiles";
 import type { ForkEnvironment, OtherMachineFork } from "./timelineRowContext";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { threadEnvironment } from "../../state/threads";
-import { waitForThreadShell } from "../../state/entities";
+import { readProject, waitForThreadShell } from "../../state/entities";
 import { openRevertConfirm } from "./ChatOverlayHosts";
 import { assetEnvironment } from "../../state/assets";
 import { readEnvironmentScope } from "../../state/session";
@@ -107,7 +109,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     setThreadError,
   } = input;
   const navigate = useNavigate();
-  const handleNewThread = useNewThreadHandler();
+  const createThread = useOrchestrationCommand(threadEnvironment.create, { reportFailure: false });
   const { environments } = useEnvironments();
   const { scratchWorkspaceRootFor, openScratchProject } = useScratchProject();
   const createAttachmentAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -267,31 +269,56 @@ export function useTimelineRewind(input: TimelineRewindInput) {
       }
       return;
     }
-    const history = threadContextAttachment(
-      environmentId,
-      threadTranscriptThroughRun(transcript.value, forkInput.runId),
-    );
     const target = forkInput.environment;
-    const projectId =
-      target.projectId ??
-      (await openScratchProject(target.environmentId, "Could not fork without a project"))?.id;
-    if (projectId === undefined) return;
-    const draft = await handleNewThread(scopeProjectRef(target.environmentId, projectId));
-    if (draft === null) return;
-    useComposerDraftStore.getState().addFiles(
-      draft.draftId,
-      [
-        {
-          type: "file",
-          id: randomUUID(),
-          name: history.name,
-          mimeType: composerFileAttachmentMimeType(history),
-          sizeBytes: history.size,
-          file: history,
-        },
-      ],
-      { appendReference: true },
-    );
+    const project =
+      target.projectId === null
+        ? await openScratchProject(target.environmentId, "Could not fork without a project")
+        : readProject(scopeProjectRef(target.environmentId, target.projectId));
+    if (project === null) return;
+    const defaults = resolveNewThreadDefaults(project);
+    if (defaults === null) {
+      setThreadError(activeThread.id, `No model is available for the fork on ${target.label}.`);
+      return;
+    }
+    const targetThreadRef = scopeThreadRef(target.environmentId, newThreadId());
+    const created = await createThread({
+      environmentId: target.environmentId,
+      input: {
+        threadId: targetThreadRef.threadId,
+        projectId: project.id,
+        title: `${activeThread.title} fork`,
+        modelSelection: defaults.modelSelection,
+        runtimeMode: defaults.runtimeMode,
+        interactionMode: DEFAULT_INTERACTION_MODE,
+        branch: null,
+        worktreePath: null,
+        importedHistory: importedHistoryFromTranscript(
+          threadTranscriptThroughRun(transcript.value, forkInput.runId),
+        ),
+      },
+    });
+    if (created._tag === "Failure") {
+      if (!isAtomCommandInterrupted(created)) {
+        const error = squashAtomCommandFailure(created);
+        setThreadError(
+          activeThread.id,
+          error instanceof Error ? error.message : `Failed to fork on ${target.label}.`,
+        );
+      }
+      return;
+    }
+    const targetThreadReady = await waitForThreadShell(targetThreadRef);
+    if (!targetThreadReady) {
+      setThreadError(
+        activeThread.id,
+        `The fork was created on ${target.label}, but its thread data did not reach this client. Reconnect and try opening it from the sidebar.`,
+      );
+      return;
+    }
+    await navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(targetThreadRef),
+    });
   };
   const onForkToEnvironmentStable = useStableCallback(onForkToEnvironment);
   const otherMachineFork: OtherMachineFork = {

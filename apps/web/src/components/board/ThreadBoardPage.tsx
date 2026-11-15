@@ -7,17 +7,10 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
-import type {
-  EnvironmentId,
-  ModelSelection,
-  RuntimeMode,
-  ThreadTicketStage,
-} from "@t3tools/contracts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import type { EnvironmentId, ThreadTicketStage } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { useClientSettings } from "../../hooks/useSettings";
@@ -27,12 +20,10 @@ import {
   refreshArchivedThreadsForEnvironment,
   useArchivedThreadSnapshots,
 } from "../../lib/archivedThreadsState";
+import { resolveNewThreadDefaults } from "../../lib/newThreadDefaults";
 import { newThreadId } from "../../lib/utils";
 import { readLocalApi } from "../../localApi";
-import { resolveProjectDefaultProviderModelSelection } from "../../providerInstances";
 import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../../state/entities";
-import { environmentPresentations } from "../../state/presentation";
-import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -51,11 +42,6 @@ import {
   type ThreadBoardStep,
   type ThreadBoardThread,
 } from "./threadBoard.logic";
-
-interface TicketDefaults {
-  readonly modelSelection: ModelSelection;
-  readonly runtimeMode: RuntimeMode;
-}
 
 type BoardCommandResult = AtomCommandResult<unknown, unknown>;
 type BoardCommandFailure = Extract<BoardCommandResult, { readonly _tag: "Failure" }>;
@@ -77,29 +63,6 @@ function reportBoardFailure(title: string, result: BoardCommandFailure) {
       description: error instanceof Error ? error.message : "An error occurred.",
     }),
   );
-}
-
-/** The model and mode a new thread in this project starts with, read when the ticket is made. */
-function resolveTicketDefaults(project: BoardProject): TicketDefaults | null {
-  const settings = appAtomRegistry.get(serverEnvironment.settingsValueAtom(project.environmentId));
-  if (settings === null) return null;
-  const projectSettings = resolveProjectSettings(settings, project.id, project).settings;
-  const runtimeMode = projectSettings.defaultRuntimeMode;
-  if (projectSettings.defaultModelSelection) {
-    return { modelSelection: projectSettings.defaultModelSelection, runtimeMode };
-  }
-  const providersByEnvironment = appAtomRegistry.get(
-    environmentPresentations.providersByEnvironmentAtom,
-  );
-  const providers = providersByEnvironment.get(project.environmentId);
-  if (providers === undefined) return null;
-  const modelSelection = resolveProjectDefaultProviderModelSelection(
-    providers,
-    settings,
-    project.id,
-  );
-  if (modelSelection === null) return null;
-  return { modelSelection, runtimeMode };
 }
 
 export function ThreadBoardPage() {
@@ -246,7 +209,7 @@ export function ThreadBoardPage() {
   };
 
   const createTicket = async (project: BoardProject, title: string, stage: ThreadTicketStage) => {
-    const defaults = resolveTicketDefaults(project);
+    const defaults = resolveNewThreadDefaults(project);
     if (defaults === null) {
       toastManager.add(
         stackedThreadToast({

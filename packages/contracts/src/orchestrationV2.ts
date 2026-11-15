@@ -102,6 +102,15 @@ export type OrchestrationV2CreationSource = typeof OrchestrationV2CreationSource
 export const OrchestrationV2ThreadHistoryOrigin = Schema.Literals(["native", "v1_import"]);
 export type OrchestrationV2ThreadHistoryOrigin = typeof OrchestrationV2ThreadHistoryOrigin.Type;
 
+/** One message of the conversation that a new thread copies from a thread on another machine. */
+export const OrchestrationV2ImportedHistoryMessage = Schema.Struct({
+  role: Schema.Literals(["user", "assistant", "reasoning"]),
+  text: Schema.String,
+  createdAt: Schema.DateTimeUtc,
+});
+export type OrchestrationV2ImportedHistoryMessage =
+  typeof OrchestrationV2ImportedHistoryMessage.Type;
+
 const OrchestrationV2CreationFields = {
   createdBy: OrchestrationV2Actor,
   creationSource: OrchestrationV2CreationSource,
@@ -3104,6 +3113,8 @@ export const OrchestrationV2Command = Schema.Union([
         metadata: Schema.optional(OrchestrationV2ProviderThreadNativeMetadata),
       }),
     ),
+    /** The conversation this thread starts from, when it is a fork of a thread on another machine. */
+    importedHistory: Schema.optional(Schema.Array(OrchestrationV2ImportedHistoryMessage)),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.archive"),

@@ -13,6 +13,7 @@ import {
   type NodeId,
   type OrchestrationV2Command,
   type OrchestrationV2CreationSource,
+  type OrchestrationV2ImportedHistoryMessage,
   type PlanId,
   type ProjectId,
   type ProjectIconOverride,
@@ -91,6 +92,8 @@ export interface CreateThreadInput extends CommandMetadata {
   readonly interactionMode: ProviderInteractionMode;
   readonly branch: string | null;
   readonly worktreePath: string | null;
+  /** The conversation the thread starts from, when it is a fork of a thread on another machine. */
+  readonly importedHistory?: ReadonlyArray<OrchestrationV2ImportedHistoryMessage>;
 }
 
 export interface ThreadCommandInput extends CommandMetadata {
@@ -492,6 +495,7 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
     interactionMode: input.interactionMode,
     branch: input.branch,
     worktreePath: input.worktreePath,
+    ...(input.importedHistory === undefined ? {} : { importedHistory: input.importedHistory }),
   });
 });
 
