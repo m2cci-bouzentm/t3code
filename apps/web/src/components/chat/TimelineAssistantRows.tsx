@@ -9,7 +9,7 @@ import { GitForkIcon, ReplyIcon } from "lucide-react";
 import { captureAssistantMessageOpening } from "~/lib/assistantTextSelection";
 import { responseContextRecord } from "~/lib/composerContextRecords";
 import { Button } from "../ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Menu, MenuItem, MenuItemDetail, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
@@ -180,6 +180,7 @@ function AssistantForkButton({
               onClick={() => trackFork(otherMachineFork.fork({ ...source, environment }))}
             >
               Fork on {environment.label}
+              {environment.projectId === null ? <MenuItemDetail>No project</MenuItemDetail> : null}
             </MenuItem>
           ))}
         </MenuPopup>

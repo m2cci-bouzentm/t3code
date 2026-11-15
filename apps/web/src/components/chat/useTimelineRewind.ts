@@ -24,6 +24,8 @@ import { newThreadId, randomUUID } from "~/lib/utils";
 import { threadContextAttachment, threadTranscriptThroughRun } from "~/lib/threadContextAttachment";
 import { orchestrationEnvironment } from "~/state/orchestration";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
+import { useScratchProject } from "../../hooks/useScratchProject";
+import { type EnvironmentPresentation, useEnvironments } from "../../state/environments";
 import type { EnvironmentOption } from "../BranchToolbar.logic";
 import { composerFileAttachmentMimeType } from "./composerAttachmentFiles";
 import type { ForkEnvironment, OtherMachineFork } from "./timelineRowContext";
@@ -60,21 +62,23 @@ interface TimelineRewindInput {
   readonly setThreadError: ReturnType<typeof makeThreadErrorSetter>;
 }
 
-function otherMachinesWithProject(
-  environments: ReadonlyArray<EnvironmentOption>,
-  environmentId: EnvironmentId,
-): ForkEnvironment[] {
-  return environments.flatMap((environment) =>
-    environment.environmentId === environmentId || environment.projectId === null
-      ? []
-      : [
-          {
-            environmentId: environment.environmentId,
-            projectId: environment.projectId,
-            label: environment.label,
-          },
-        ],
-  );
+function otherMachines(input: {
+  readonly environments: ReadonlyArray<Pick<EnvironmentPresentation, "environmentId" | "label">>;
+  readonly projectEnvironments: ReadonlyArray<EnvironmentOption>;
+  readonly environmentId: EnvironmentId;
+  readonly scratchWorkspaceRootFor: (environmentId: EnvironmentId) => string | null;
+}): ForkEnvironment[] {
+  return input.environments.flatMap((environment) => {
+    if (environment.environmentId === input.environmentId) return [];
+    const withProject = input.projectEnvironments.find(
+      (option) => option.environmentId === environment.environmentId,
+    );
+    const projectId = withProject === undefined ? null : withProject.projectId;
+    if (projectId === null && input.scratchWorkspaceRootFor(environment.environmentId) === null) {
+      return [];
+    }
+    return [{ environmentId: environment.environmentId, projectId, label: environment.label }];
+  });
 }
 
 /**
@@ -104,6 +108,8 @@ export function useTimelineRewind(input: TimelineRewindInput) {
   } = input;
   const navigate = useNavigate();
   const handleNewThread = useNewThreadHandler();
+  const { environments } = useEnvironments();
+  const { scratchWorkspaceRootFor, openScratchProject } = useScratchProject();
   const createAttachmentAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
     refresh: true,
@@ -265,9 +271,12 @@ export function useTimelineRewind(input: TimelineRewindInput) {
       environmentId,
       threadTranscriptThroughRun(transcript.value, forkInput.runId),
     );
-    const draft = await handleNewThread(
-      scopeProjectRef(forkInput.environment.environmentId, forkInput.environment.projectId),
-    );
+    const target = forkInput.environment;
+    const projectId =
+      target.projectId ??
+      (await openScratchProject(target.environmentId, "Could not fork without a project"))?.id;
+    if (projectId === undefined) return;
+    const draft = await handleNewThread(scopeProjectRef(target.environmentId, projectId));
     if (draft === null) return;
     useComposerDraftStore.getState().addFiles(
       draft.draftId,
@@ -286,7 +295,12 @@ export function useTimelineRewind(input: TimelineRewindInput) {
   };
   const onForkToEnvironmentStable = useStableCallback(onForkToEnvironment);
   const otherMachineFork: OtherMachineFork = {
-    environments: otherMachinesWithProject(logicalProjectEnvironments, environmentId),
+    environments: otherMachines({
+      environments,
+      projectEnvironments: logicalProjectEnvironments,
+      environmentId,
+      scratchWorkspaceRootFor,
+    }),
     fork: onForkToEnvironmentStable,
   };
   const onRevertTimelineTurn = (targetTurnCount: number, messageId: MessageId) => {

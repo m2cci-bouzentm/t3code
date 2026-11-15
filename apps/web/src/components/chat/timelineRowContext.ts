@@ -44,10 +44,10 @@ export interface TurnItemSource {
   }) => Atom.Atom<AsyncResult.AsyncResult<CommandOutputView, unknown>>;
 }
 
-/** A machine that has the project of the thread, other than the machine of the thread. */
+/** A machine other than the machine of the thread. Without the project, a fork has no project. */
 export interface ForkEnvironment {
   readonly environmentId: EnvironmentId;
-  readonly projectId: ProjectId;
+  readonly projectId: ProjectId | null;
   readonly label: string;
 }
 
