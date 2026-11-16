@@ -54,6 +54,10 @@ export interface CommandOutputHubShape {
   readonly append: (input: CommandOutputTarget & { readonly chunk: string }) => Effect.Effect<void>;
   /** Retains the tail briefly for settlements without output; otherwise rows use persisted output. */
   readonly finish: (input: CommandOutputTarget) => Effect.Effect<void>;
+  /** A background command keeps its output live after its item settled, until it stops running. */
+  readonly setBackground: (
+    input: CommandOutputTarget & { readonly running: boolean },
+  ) => Effect.Effect<void>;
   readonly subscribe: (
     input: CommandOutputTarget,
   ) => Stream.Stream<OrchestrationV2CommandOutputFrame, OrchestrationV2CommandOutputError>;
@@ -123,6 +127,8 @@ export const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const tails = new Map<string, TerminalOutputState>();
   const finished = new Map<string, TerminalOutputState>();
+  const background = new Set<string>();
+  const finishedBackground = new Map<string, TerminalOutputState>();
   const subscribers = new Map<string, Set<Subscriber>>();
 
   const wakeAll = (key: string, chunk: string) =>
@@ -161,9 +167,27 @@ export const make = Effect.gen(function* () {
     Effect.sync(() => {
       const key = commandKey(target);
       const tail = tails.get(key);
-      if (tail === undefined) return;
+      if (tail === undefined || background.has(key)) return;
       tails.delete(key);
       setBounded(finished, key, tail, MAX_FINISHED_COMMANDS);
+    });
+
+  const setBackground: CommandOutputHubShape["setBackground"] = ({ running, ...target }) =>
+    Effect.suspend(() => {
+      const key = commandKey(target);
+      if (running) {
+        background.add(key);
+        return Effect.void;
+      }
+      if (!background.delete(key)) return Effect.void;
+      setBounded(
+        finishedBackground,
+        key,
+        tails.get(key) ?? EMPTY_TERMINAL_OUTPUT,
+        MAX_FINISHED_COMMANDS,
+      );
+      tails.delete(key);
+      return wakeAll(key, "");
     });
 
   const subscribe: CommandOutputHubShape["subscribe"] = (target) =>
@@ -260,7 +284,16 @@ export const make = Effect.gen(function* () {
           lastFrameAt = yield* Clock.currentTimeMillis;
           throttle = COMMAND_OUTPUT_FRAME_INTERVAL_MS;
           const tail = tails.get(key) ?? finished.get(key);
-          if (settled !== undefined) {
+          const backgroundTail = finishedBackground.get(key);
+          if (settled !== undefined && backgroundTail !== undefined) {
+            return {
+              kind: "replace",
+              text: backgroundTail.text,
+              truncated: backgroundTail.truncated,
+              running: false,
+            };
+          }
+          if (settled !== undefined && !background.has(key)) {
             if (settled.output === undefined && tail !== undefined) {
               return {
                 kind: "replace",
@@ -309,7 +342,7 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  return CommandOutputHub.of({ append, finish, subscribe });
+  return CommandOutputHub.of({ append, finish, setBackground, subscribe });
 });
 
 export const layer: Layer.Layer<

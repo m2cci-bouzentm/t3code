@@ -67,7 +67,7 @@ export function BackgroundWorkDetails(props: {
                       <ShellCommandBlock command={command} />
                     </div>
                   ) : null}
-                  {itemId && streamsOutput && item?.status === "running" ? (
+                  {itemId && streamsOutput ? (
                     <div className="font-mono text-xs whitespace-pre-wrap break-words">
                       <CommandOutputPanel
                         environmentId={props.environmentId}

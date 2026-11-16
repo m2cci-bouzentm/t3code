@@ -348,4 +348,46 @@ layer("CommandOutputHub", (it) => {
       assert.equal(yield* Queue.take(frames), "ended");
     }),
   );
+
+  it.effect("a background command streams after its item settled, until it stops", () =>
+    Effect.gen(function* () {
+      const hub = yield* CommandOutputHub.CommandOutputHub;
+      const threadId = yield* seedThread;
+      const target = { threadId, itemId: ITEM_ID };
+      yield* writeCommandItem(threadId, { status: "running" });
+      yield* hub.setBackground({ ...target, running: true });
+      yield* hub.append({ ...target, chunk: "line 1\n" });
+      yield* hub.finish(target);
+      yield* writeCommandItem(threadId, {
+        status: "completed",
+        output: "Command running in background with ID: task",
+        exitCode: 0,
+      });
+
+      const frames = yield* subscribeFrames(threadId);
+      assert.deepEqual(yield* takeFrame(frames), {
+        kind: "replace",
+        text: "line 1\n",
+        truncated: false,
+        running: true,
+      });
+      yield* TestClock.adjust("1 second");
+      yield* hub.append({ ...target, chunk: "line 2\n" });
+      assert.deepEqual(yield* takeFrame(frames), {
+        kind: "append",
+        text: "line 2\n",
+        truncated: false,
+        running: true,
+      });
+      yield* TestClock.adjust("1 second");
+      yield* hub.setBackground({ ...target, running: false });
+      assert.deepEqual(yield* takeFrame(frames), {
+        kind: "replace",
+        text: "line 1\nline 2\n",
+        truncated: false,
+        running: false,
+      });
+      assert.equal(yield* Queue.take(frames), "ended");
+    }),
+  );
 });

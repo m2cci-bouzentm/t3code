@@ -2651,6 +2651,9 @@ export const layerWithOptions = (
             if (nativeEvent.type === "command_output.delta") {
               return commandOutput.append(nativeEvent);
             }
+            if (nativeEvent.type === "command_output.background") {
+              return commandOutput.setBackground(nativeEvent);
+            }
             if (nativeEvent.type === "prompt_suggestion.updated") {
               return SubscriptionRef.update(promptSuggestionStore, (current) => {
                 const next = new Map(current);

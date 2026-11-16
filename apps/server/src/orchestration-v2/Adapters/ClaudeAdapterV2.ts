@@ -131,6 +131,7 @@ import {
   type ProviderThreadId,
   type RunId,
   type ThreadId,
+  type TurnItemId,
   resolveIdleCompaction,
   isDelegatedAppThread,
 } from "@t3tools/contracts";
@@ -3523,6 +3524,25 @@ function claudeTaskTypeFromSdkMessage(message: SDKMessage): string | null {
   return typeof taskType === "string" ? taskType : null;
 }
 
+interface ClaudeTaskOutputTail {
+  readonly fiber: Fiber.Fiber<void>;
+  readonly stop: Deferred.Deferred<void>;
+  readonly taskId: string;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+  readonly background: boolean;
+}
+
+function isListedClaudeBackgroundTask(
+  rosters: ReadonlyMap<string, ReadonlyMap<string, unknown>>,
+  taskId: string,
+): boolean {
+  for (const roster of rosters.values()) {
+    if (roster.has(taskId)) return true;
+  }
+  return false;
+}
+
 function isClaudeNonSubagentTask(message: SDKMessage): boolean {
   return isClaudeOpaqueBackgroundTaskType(claudeTaskTypeFromSdkMessage(message));
 }
@@ -5569,21 +5589,47 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         });
         const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
         const activeTurn = yield* Ref.make<ActiveClaudeTurnContext | null>(null);
-        const taskOutputTails = new Map<
-          string,
-          { readonly fiber: Fiber.Fiber<void>; readonly stop: Deferred.Deferred<void> }
-        >();
+        const taskOutputTails = new Map<string, ClaudeTaskOutputTail>();
+        const endTaskOutputTail = (toolUseId: string, tail: ClaudeTaskOutputTail) => {
+          taskOutputTails.delete(toolUseId);
+          return Deferred.succeed(tail.stop, undefined).pipe(
+            Effect.andThen(Fiber.await(tail.fiber)),
+            Effect.asVoid,
+          );
+        };
         // Waits for the tail's last read so its output lands before the call settles.
-        const stopTaskOutputTail = (toolUseId: string) =>
-          Effect.suspend(() => {
-            const tail = taskOutputTails.get(toolUseId);
-            if (tail === undefined) return Effect.void;
-            taskOutputTails.delete(toolUseId);
-            return Deferred.succeed(tail.stop, undefined).pipe(
-              Effect.andThen(Fiber.await(tail.fiber)),
-              Effect.asVoid,
-            );
+        // A command that continues in the background keeps its tail until its task ends.
+        const stopTaskOutputTail = Effect.fnUntraced(function* (toolUseId: string) {
+          const tail = taskOutputTails.get(toolUseId);
+          if (tail === undefined) return;
+          const rosters = yield* Ref.get(pendingBackgroundTasksByNativeThread);
+          if (!isListedClaudeBackgroundTask(rosters, tail.taskId)) {
+            yield* endTaskOutputTail(toolUseId, tail);
+            return;
+          }
+          taskOutputTails.set(toolUseId, { ...tail, background: true });
+          yield* emitProviderEvent({
+            type: "command_output.background",
+            driver: CLAUDE_PROVIDER,
+            threadId: tail.threadId,
+            itemId: tail.itemId,
+            running: true,
           });
+        });
+        const stopEndedBackgroundOutputTails = Effect.fnUntraced(function* () {
+          const rosters = yield* Ref.get(pendingBackgroundTasksByNativeThread);
+          for (const [toolUseId, tail] of taskOutputTails) {
+            if (!tail.background || isListedClaudeBackgroundTask(rosters, tail.taskId)) continue;
+            yield* endTaskOutputTail(toolUseId, tail);
+            yield* emitProviderEvent({
+              type: "command_output.background",
+              driver: CLAUDE_PROVIDER,
+              threadId: tail.threadId,
+              itemId: tail.itemId,
+              running: false,
+            });
+          }
+        });
         const sdkMessageLock = yield* Semaphore.make(1);
         // Members can finish after the launching turn; retain state to emit each transition once.
         const workflowMemberStates = yield* Ref.make(
@@ -6390,6 +6436,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               }
               return updated;
             });
+            yield* stopEndedBackgroundOutputTails();
             yield* rememberOpaqueTasks(tasks);
             if (tasks.length > 0) {
               yield* markWakeEligibleOpaqueBackgroundTasks(
@@ -6441,6 +6488,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
             return [true, updated] as const;
           }).pipe(
+            Effect.tap(() => stopEndedBackgroundOutputTails()),
             Effect.tap(() =>
               clearTaskIdFromNativeThreadSet(
                 awaitedBackgroundTasksByNativeThread,
@@ -6461,6 +6509,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               updated.delete(nativeThreadId);
               return updated;
             });
+            yield* stopEndedBackgroundOutputTails();
             yield* clearNativeThreadTaskIdSet(awaitedBackgroundTasksByNativeThread, nativeThreadId);
             yield* endClaudeMonitorTasks((_taskId, task) => task.nativeThreadId === nativeThreadId);
           });
@@ -10691,8 +10740,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               if (
                 liveQuery.taskOutputRoot !== undefined &&
                 message.task_type === "local_bash" &&
-                // Older Claude Code builds omit the flag on foreground calls.
-                message.is_backgrounded !== true &&
                 tailedCall?.classification.itemType === "command_execution" &&
                 !taskOutputTails.has(tailedCall.nativeItemId)
               ) {
@@ -10719,7 +10766,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   Effect.provideService(Path.Path, path),
                   Effect.forkIn(sessionScope),
                 );
-                taskOutputTails.set(tailedCall.nativeItemId, { fiber, stop });
+                taskOutputTails.set(tailedCall.nativeItemId, {
+                  fiber,
+                  stop,
+                  taskId: message.task_id,
+                  threadId: tailedCall.threadId,
+                  itemId,
+                  background: false,
+                });
               }
               context.ignoredTaskIds.add(message.task_id);
               yield* applyBackgroundTaskRosterMessage({

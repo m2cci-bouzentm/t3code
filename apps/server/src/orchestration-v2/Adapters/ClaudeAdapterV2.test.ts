@@ -12631,6 +12631,155 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
+  it.effect.skipIf(process.getuid === undefined)(
+    "tails background Bash output until its task ends",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-claude-task-output-background-",
+        });
+        const physicalCwd = path.join(root, "real", "project");
+        const launchCwd = path.join(root, "link");
+        yield* fileSystem.makeDirectory(physicalCwd, { recursive: true });
+        yield* fileSystem.symlink(physicalCwd, launchCwd);
+        // The session opens in /workspace; a relative TMPDIR puts Claude's
+        // task files under whichever cwd the CLI was launched in. Linux,
+        // because Claude Code's macOS build ignores TMPDIR.
+        const harness = yield* makeWakeHarnessWithOptions({ environment: { TMPDIR: "../tmp" } });
+        const now = yield* DateTime.now;
+        const toolUseId = "toolu_background_bash";
+        const taskId = "background-bash-task";
+        const tasks = path.join(
+          root,
+          "real",
+          "tmp",
+          `claude-${process.getuid?.()}`,
+          "project",
+          WAKE_NATIVE_SESSION,
+          "tasks",
+        );
+        yield* fileSystem.makeDirectory(tasks, { recursive: true });
+        yield* fileSystem.writeFileString(path.join(tasks, `${taskId}.output`), "line 1\n");
+
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-task-output-background"),
+            text: "Run the build.",
+            attachments: [],
+            runtimePolicy: { ...CLAUDE_TEST_RUNTIME_POLICY, cwd: launchCwd },
+          }),
+        );
+        assert.equal(harness.getOpenedOptions()?.cwd, launchCwd);
+        for (const frame of [
+          claudeSdkFrame({
+            type: "assistant",
+            message: {
+              model: "claude-sonnet-4-6",
+              id: "msg_background_bash",
+              type: "message",
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: toolUseId,
+                  name: "Bash",
+                  input: { command: "vp run build", description: "Build" },
+                },
+              ],
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 1, output_tokens: 1 },
+            },
+            parent_tool_use_id: null,
+            uuid: "00000000-0000-4000-8000-000000000b01",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+          claudeSdkFrame({
+            type: "system",
+            subtype: "task_started",
+            task_id: taskId,
+            tool_use_id: toolUseId,
+            description: "vp run build",
+            is_backgrounded: true,
+            task_type: "local_bash",
+            uuid: "00000000-0000-4000-8000-000000000b02",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+          claudeSdkFrame({
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: toolUseId,
+                  content: `Command running in background with ID: ${taskId}`,
+                },
+              ],
+            },
+            parent_tool_use_id: null,
+            uuid: "00000000-0000-4000-8000-000000000b03",
+            session_id: WAKE_NATIVE_SESSION,
+            tool_use_result: {
+              stdout: "",
+              stderr: "",
+              interrupted: false,
+              backgroundTaskId: taskId,
+            },
+          }),
+          makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000b04", result: "Built." }),
+        ]) {
+          yield* Queue.offer(harness.sdkMessages, frame);
+        }
+        yield* harness.awaitTerminal(1);
+
+        const chunks = () =>
+          harness.events.flatMap((event) =>
+            event.type === "command_output.delta" ? [event.chunk] : [],
+          );
+        const backgroundStates = () =>
+          harness.events.flatMap((event) =>
+            event.type === "command_output.background" ? [event.running] : [],
+          );
+        yield* harness.until(() => chunks().length === 1);
+        assert.deepEqual(backgroundStates(), [true]);
+
+        yield* fileSystem.writeFileString(path.join(tasks, `${taskId}.output`), "line 1\nline 2\n");
+        yield* Queue.offer(
+          harness.sdkMessages,
+          claudeSdkFrame({
+            type: "system",
+            subtype: "task_notification",
+            task_id: taskId,
+            tool_use_id: toolUseId,
+            status: "completed",
+            output_file: path.join(tasks, `${taskId}.output`),
+            summary: "Build completed",
+            uuid: "00000000-0000-4000-8000-000000000b05",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+        );
+        yield* harness.until(() => backgroundStates().length === 2);
+        assert.deepEqual(chunks(), ["line 1\n", "line 2\n"]);
+        assert.deepEqual(backgroundStates(), [true, false]);
+      }).pipe(
+        Effect.provideService(HostProcess.Platform, "linux"),
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+  );
+
   it.effect("lets the native SDK acknowledge Stop before closing its own query", () =>
     Effect.gen(function* () {
       let closes = 0;
