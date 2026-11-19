@@ -76,7 +76,7 @@ import {
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { isCommandPaletteOpen } from "~/commandPaletteBus";
-import { isElectron } from "~/env";
+import { isElectron, isInstalledApp } from "~/env";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "~/keybindings";
 import { isTerminalFocused } from "~/lib/terminalFocus";
@@ -144,6 +144,7 @@ function getShortcutContext() {
     modelPickerOpen: false,
     isWeb: !isElectron,
     isDesktop: isElectron,
+    isInstalledApp,
   };
 }
 
