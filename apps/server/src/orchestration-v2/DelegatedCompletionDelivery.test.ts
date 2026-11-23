@@ -183,6 +183,7 @@ const seedParentWithTerminalTask = (input: {
   readonly siblingTasks?: ReadonlyArray<{
     readonly id: NodeId;
     readonly deliveryState: "delivered" | "claimed";
+    readonly createdBy?: "agent" | "user";
   }>;
   readonly now: DateTime.Utc;
 }) =>
@@ -287,8 +288,11 @@ const seedParentWithTerminalTask = (input: {
           },
         },
         ...[
-          { id: input.taskId, deliveryState: input.deliveryState },
-          ...(input.siblingTasks ?? []),
+          { id: input.taskId, deliveryState: input.deliveryState, createdBy: "agent" as const },
+          ...(input.siblingTasks ?? []).map((sibling) => ({
+            createdBy: "agent" as const,
+            ...sibling,
+          })),
         ].map((task) => ({
           id: EventId.make(`event:seed-task:${input.threadId}:${task.id}`),
           type: "subagent.updated" as const,
@@ -304,7 +308,7 @@ const seedParentWithTerminalTask = (input: {
             runId: input.runId,
             parentNodeId: input.rootNodeId,
             origin: "app_owned" as const,
-            createdBy: "agent" as const,
+            createdBy: task.createdBy,
             driver,
             providerInstanceId: modelSelection.instanceId,
             providerThreadId: null,
@@ -1188,6 +1192,62 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
         "cancelled",
       );
       assert.isNull(cancelled.runs.find((run) => run.id === runId)?.delegatedCompletion?.delivery);
+    }),
+  );
+
+  it.effect("tells the parent a completed task was started by the user", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("user-task-wake-parent");
+      const runId = RunId.make("user-task-wake-origin");
+      const taskId = NodeId.make("user-task-wake-first");
+      const siblingId = NodeId.make("user-task-wake-sibling");
+      yield* seedParentWithTerminalTask({
+        threadId,
+        projectId: ProjectId.make("user-task-wake-project"),
+        runId,
+        rootNodeId: NodeId.make("user-task-wake-root"),
+        taskId,
+        deliveryState: "claimed",
+        deliveryTaskIds: [taskId, siblingId],
+        siblingTasks: [{ id: siblingId, deliveryState: "claimed", createdBy: "user" }],
+        completionWake: "always",
+        now,
+      });
+      const delivery = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!
+        .delegatedCompletion!.delivery!;
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        createdBy: "agent",
+        creationSource: "server",
+        commandId: CommandId.make("user-task-wake-wake"),
+        threadId,
+        messageId: delivery.messageId,
+        text: "Delegated tasks completed",
+        attachments: [],
+        modelSelection,
+        dispatchMode: { type: "queue_after_active" },
+        delegatedCompletion: {
+          parentRunId: runId,
+          generation: delivery.generation,
+          taskIds: delivery.taskIds,
+        },
+      });
+      yield* orchestrator.dispatch({
+        type: "delegated_task.completion-delivery.acknowledge",
+        commandId: CommandId.make("user-task-wake-ack"),
+        parentThreadId: threadId,
+        taskId,
+        observedByRunId: runId,
+      });
+
+      const projection = yield* orchestrator.getThreadProjection(threadId);
+      const message = projection.messages.find((row) => row.id === delivery.messageId);
+      assert.equal(
+        message?.text,
+        `Delegated task ${siblingId} [completed] (started by the user from the Sub agent button, not by you; the user's task: "Inspect the delivered ownership edge."):\nchild finished`,
+      );
     }),
   );
 

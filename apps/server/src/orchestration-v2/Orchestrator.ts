@@ -947,6 +947,12 @@ function legacyPullRequestLink(
 
 const DELEGATED_RESULT_INLINE_BYTES = 16_000;
 
+// The parent reads this wake as its own delegation unless told the user started the task.
+function delegatedTaskStarter(task: OrchestrationV2Subagent | undefined): string {
+  if (task?.createdBy !== "user") return "";
+  return ` (started by the user from the Sub agent button, not by you; the user's task: ${JSON.stringify(task.prompt)})`;
+}
+
 function delegatedCompletionWakeDetail(
   taskIds: ReadonlyArray<string>,
   tasks: ReadonlyArray<OrchestrationV2Subagent>,
@@ -955,7 +961,7 @@ function delegatedCompletionWakeDetail(
   return taskIds
     .map((taskId) => {
       const task = tasks.find((candidate) => candidate.id === taskId);
-      const label = `Delegated task ${taskId}${task?.title == null ? "" : ` (${task.title})`}${task === undefined ? " reached a terminal state" : ` [${task.status}]`}`;
+      const label = `Delegated task ${taskId}${task?.title == null ? "" : ` (${task.title})`}${task === undefined ? " reached a terminal state" : ` [${task.status}]`}${delegatedTaskStarter(task)}`;
       if (task?.result != null) {
         const detail = `${label}:\n${task.result}`;
         const bytes = Buffer.byteLength(detail);
