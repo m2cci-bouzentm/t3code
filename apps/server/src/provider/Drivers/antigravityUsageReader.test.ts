@@ -130,6 +130,45 @@ describe("readAntigravityUsage", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("learns a model ID named both by its model and by an effort display name", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const dir = yield* tempDir;
+      yield* seedDatabase(path.join(dir, "a-steps.db"), (db) =>
+        Effect.gen(function* () {
+          yield* createTables(db);
+          yield* db.run("INSERT INTO steps VALUES (?, ?)", [
+            0,
+            new Uint8Array(protoBytes(9, [...protoNumber(1, 9467), ...protoNumber(2, 10)])),
+          ]);
+        }),
+      );
+      yield* seedDatabase(path.join(dir, "z-names.db"), (db) =>
+        Effect.gen(function* () {
+          yield* createTables(db);
+          const named = [
+            [...protoText(19, "gemini-9-neon"), ...protoText(21, "Gemini 9 Neon (High)")],
+            protoText(21, "Gemini 9 Neon (High)"),
+          ];
+          for (const [idx, names] of named.entries()) {
+            yield* db.run("INSERT INTO gen_metadata VALUES (?, ?)", [
+              idx,
+              new Uint8Array(protoBytes(1, [...protoNumber(3, 9467), ...names])),
+            ]);
+          }
+        }),
+      );
+      const result = yield* readAntigravityUsage(dir, 0);
+      assert.deepStrictEqual(
+        result.files
+          .filter((file) => file.path.endsWith("a-steps.db"))
+          .flatMap((file) => file.records)
+          .map(({ model }) => model),
+        ["gemini-9-neon"],
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("keeps explicit model evidence separate from retries and conflicting names", () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;

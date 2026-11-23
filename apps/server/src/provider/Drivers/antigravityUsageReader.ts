@@ -126,6 +126,10 @@ const MODEL_IDS: Record<number, string> = {
   1417: "gemini-4-argon",
   1418: "gemini-4-argon",
   1419: "gemini-4-argon",
+  1465: "gemini-4-neon",
+  1466: "gemini-4-neon",
+  1467: "gemini-4-neon",
+  1468: "gemini-4-neon",
 };
 
 // Effort and routing variants share the base model's price.
@@ -170,7 +174,15 @@ function isConcreteModel(model: string): boolean {
 
 function rememberModel(models: Map<number, string | null>, id: number, model: string | null) {
   const previous = models.get(id);
-  models.set(id, previous === undefined || previous === model ? model : null);
+  if (previous === undefined) {
+    models.set(id, model);
+    return;
+  }
+  const isSameRateModel =
+    previous !== null &&
+    model !== null &&
+    antigravityRateModel(previous) === antigravityRateModel(model);
+  if (!isSameRateModel) models.set(id, null);
 }
 
 interface Metadata {
