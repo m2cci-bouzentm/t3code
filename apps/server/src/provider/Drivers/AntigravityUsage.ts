@@ -1,4 +1,12 @@
-import { type AntigravitySettings, UsageReadError } from "@t3tools/contracts";
+import {
+  type AntigravitySettings,
+  type ProviderInstanceConfig,
+  ProviderDriverKind,
+  type ServerSettings,
+  UsageReadError,
+} from "@t3tools/contracts";
+import { AcpRegistrySettings } from "@t3tools/provider-acp-registry/settings";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import type {
@@ -12,7 +20,9 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
 import { resolveAntigravityInstanceDirectories } from "../antigravityAuthSupport.ts";
 import {
@@ -26,10 +36,21 @@ export class AntigravityUsage extends Context.Service<
   {
     readonly scan: (input: {
       readonly instances: ReadonlyArray<ProviderUsageInstance<AntigravitySettings>>;
+      readonly settings: ServerSettings;
       readonly windowStartMs: number;
     }) => Effect.Effect<ReadonlyArray<ProviderUsageScan>, UsageReadError>;
   }
 >()("t3/provider/Drivers/AntigravityUsage") {}
+
+const ACP_REGISTRY_DRIVER = ProviderDriverKind.make("acpRegistry");
+const ANTIGRAVITY_ACP_AGENT_ID = "antigravity-acp";
+const decodeAcpRegistrySettings = Schema.decodeUnknownOption(AcpRegistrySettings);
+
+function isAntigravityRegistryInstance(instance: ProviderInstanceConfig): boolean {
+  if (instance.driver !== ACP_REGISTRY_DRIVER) return false;
+  const config = decodeAcpRegistrySettings(instance.config ?? {});
+  return Option.exists(config, (settings) => settings.agentId === ANTIGRAVITY_ACP_AGENT_ID);
+}
 
 const make = Effect.gen(function* () {
   const digest = yield* Digest.Digest;
@@ -64,10 +85,21 @@ const make = Effect.gen(function* () {
 
   const scan: AntigravityUsage["Service"]["scan"] = Effect.fn("AntigravityUsage.scan")(function* ({
     instances,
+    settings,
     windowStartMs,
   }) {
     const roots: Array<string> = [];
     for (const instance of instances) roots.push(...(yield* dataRoots(instance.environment)));
+    const hostEnvironment = yield* HostProcess.Environment;
+    const registryInstances = Object.values(settings.providerInstances).filter(
+      isAntigravityRegistryInstance,
+    );
+    const registryRoots = yield* Effect.forEach(registryInstances, (instance) =>
+      mergeProviderInstanceEnvironment(instance.environment, hostEnvironment).pipe(
+        Effect.flatMap(dataRoots),
+      ),
+    );
+    roots.push(...registryRoots.flat());
     for (const { instanceId } of instances.filter((instance) => instance.configured)) {
       const directories = yield* resolveAntigravityInstanceDirectories(
         host.paths.stateDir,
@@ -128,6 +160,8 @@ export const antigravityUsageReader: ProviderUsageReader<AntigravitySettings, An
   kind: "scan",
   provider: "antigravity",
   rateModel: antigravityRateModel,
-  scan: ({ instances, windowStartMs }) =>
-    AntigravityUsage.pipe(Effect.flatMap((usage) => usage.scan({ instances, windowStartMs }))),
+  scan: ({ instances, settings, windowStartMs }) =>
+    AntigravityUsage.pipe(
+      Effect.flatMap((usage) => usage.scan({ instances, settings, windowStartMs })),
+    ),
 };

@@ -2594,6 +2594,70 @@ describe("UsageService", () => {
     }),
   );
 
+  it.effect("reads Antigravity history from ACP Registry instances that run antigravity-acp", () =>
+    Effect.gen(function* () {
+      const { settings, home } = yield* setup;
+      const antigravity = NodePath.join(home, "acp-antigravity");
+      const other = NodePath.join(home, "acp-other");
+      yield* Effect.promise(async () => {
+        for (const dir of [antigravity, other]) {
+          await NodeFSP.mkdir(dir);
+          const db = new NodeSqlite.DatabaseSync(
+            NodePath.join(dir, `${NodePath.basename(dir)}.db`),
+          );
+          try {
+            db.exec("CREATE TABLE steps (idx INTEGER, metadata BLOB)");
+            // Step protobuf: 100 input tokens, 13 output tokens, and 2026-08-01T10:00Z.
+            const metadata = new Uint8Array([
+              0x4a,
+              4,
+              0x10,
+              100,
+              0x18,
+              13,
+              ...Buffer.from("420608a087b7d306", "hex"),
+            ]);
+            db.prepare("INSERT INTO steps VALUES (?, ?)").run(0, metadata);
+          } finally {
+            db.close();
+          }
+        }
+      });
+      const registryInstance = (agentId: string, dataDir: string) => ({
+        driver: ProviderDriverKind.make("acpRegistry"),
+        environment: [{ name: "ANTIGRAVITY_DATA_DIR", value: dataDir, sensitive: false }],
+        config: { source: "local", agentId, commandPath: "/usr/bin/false" },
+      });
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-service-antigravity-acp-registry-test",
+            home,
+            settings: {
+              providerInstances: {
+                ...settings.providerInstances,
+                [ProviderInstanceId.make("agy-custom")]: registryInstance(
+                  "antigravity-acp",
+                  antigravity,
+                ),
+                [ProviderInstanceId.make("other-acp")]: registryInstance("devin", other),
+              },
+            },
+          }),
+        ),
+      );
+      const summary = yield* service.readSummary(WINDOW);
+      const antigravityRoot = yield* Effect.promise(() => NodeFSP.realpath(antigravity));
+      const otherRoot = yield* Effect.promise(() => NodeFSP.realpath(other));
+      const outputTokensFrom = (root: string) =>
+        summary.buckets
+          .filter((bucket) => bucket.provider === "antigravity" && bucket.sourcePath === root)
+          .reduce((sum, bucket) => sum + bucket.totals.outputTokens, 0);
+      assert.strictEqual(outputTokensFrom(antigravityRoot), 13);
+      assert.strictEqual(outputTokensFrom(otherRoot), 0);
+    }),
+  );
+
   it.effect("reads configured and disabled accounts once across shared and aliased homes", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
