@@ -56,6 +56,28 @@ export const PersistedConnectionTarget = Schema.Union([
 ]);
 export type PersistedConnectionTarget = typeof PersistedConnectionTarget.Type;
 
+/** The same target under another name, as an instance of its own class so the catalog encodes it. */
+export function relabelConnectionTarget(target: ConnectionTarget, label: string): ConnectionTarget {
+  switch (target._tag) {
+    case "PrimaryConnectionTarget": {
+      const { _tag, ...fields } = target;
+      return new PrimaryConnectionTarget({ ...fields, label });
+    }
+    case "BearerConnectionTarget": {
+      const { _tag, ...fields } = target;
+      return new BearerConnectionTarget({ ...fields, label });
+    }
+    case "RelayConnectionTarget": {
+      const { _tag, ...fields } = target;
+      return new RelayConnectionTarget({ ...fields, label });
+    }
+    case "SshConnectionTarget": {
+      const { _tag, ...fields } = target;
+      return new SshConnectionTarget({ ...fields, label });
+    }
+  }
+}
+
 export type NetworkStatus = "unknown" | "offline" | "online";
 
 export const ConnectionTransientReason = Schema.Literals([

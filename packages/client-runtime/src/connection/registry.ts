@@ -35,7 +35,7 @@ import type {
   PersistedConnectionTarget,
   SupervisorConnectionState,
 } from "./model.ts";
-import { ConnectionBlockedError } from "./model.ts";
+import { ConnectionBlockedError, relabelConnectionTarget } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionDriver from "./driver.ts";
@@ -1007,7 +1007,7 @@ export const make = Effect.gen(function* () {
         }
         const renamedRoutes = connectionRoutes(entry).map((route) => ({
           ...route,
-          target: { ...route.target, label: input.label },
+          target: relabelConnectionTarget(route.target, input.label),
         }));
         const next = entryWithRoutes(entry, renamedRoutes);
         yield* registrations.setRoutes(input.environmentId, persistedRoutes(next));
