@@ -72,23 +72,21 @@ export function ProjectColorSheet(props: {
           <Text className="mb-4 text-sm text-foreground-muted">
             {gt("Color, on every machine and device")}
           </Text>
-          <View
-            accessibilityRole="radiogroup"
-            className="flex-row flex-wrap justify-between gap-y-3.5"
-          >
+          <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-y-3.5">
             {ProjectIconColor.literals.map((color) => (
-              <Pressable
-                key={color}
-                accessibilityRole="radio"
-                accessibilityLabel={color}
-                accessibilityState={{ selected: color === current }}
-                onPress={() => void choose(scope, color)}
-                className={cn(
-                  "size-9 rounded-full",
-                  projectIconColorClassNames(color).bar,
-                  color === current && "border-2 border-foreground",
-                )}
-              />
+              <View key={color} className="w-1/6 items-center">
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityLabel={color}
+                  accessibilityState={{ selected: color === current }}
+                  onPress={() => void choose(scope, color)}
+                  className={cn(
+                    "size-9 rounded-full",
+                    projectIconColorClassNames(color).bar,
+                    color === current && "border-2 border-foreground",
+                  )}
+                />
+              </View>
             ))}
           </View>
           <Pressable

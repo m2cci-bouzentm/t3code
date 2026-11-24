@@ -33,10 +33,8 @@ const NEWEST_THREAD_FIRST = Order.mapInput(
   Order.flip(Order.String),
   (thread: EnvironmentThreadShell) => thread.updatedAt,
 );
-const NEWEST_GROUP_FIRST = Order.mapInput(
-  Order.flip(Order.String),
-  (group: { readonly threads: ReadonlyArray<EnvironmentThreadShell> }) =>
-    group.threads[0]!.updatedAt,
+const PROJECT_A_TO_Z = Order.mapInput(Order.String, (group: { readonly scope: HomeProjectScope }) =>
+  group.scope.title.toLocaleLowerCase(),
 );
 
 function isThreadInScope(thread: EnvironmentThreadShell, scope: HomeProjectScope): boolean {
@@ -50,8 +48,9 @@ function matchesSearch(thread: EnvironmentThreadShell, query: string): boolean {
 }
 
 /**
- * Each project with its active threads, like the desktop sidebar, newest activity first; the
- * threads of no listed project come last under "No project". Empty projects are left out.
+ * Each project with its active threads, like the desktop sidebar: projects A to Z so they keep
+ * their places, threads newest first. The threads of no listed project come last under
+ * "No project". Empty projects are left out.
  */
 function groupThreads(input: {
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
@@ -75,7 +74,7 @@ function groupThreads(input: {
         threads: listed.filter((thread) => isThreadInScope(thread, scope)),
       }))
       .filter((group) => group.threads.length > 0),
-    NEWEST_GROUP_FIRST,
+    PROJECT_A_TO_Z,
   );
   const grouped = new Set(groups.flatMap((group) => group.threads));
   const ungrouped = listed.filter((thread) => !grouped.has(thread));
