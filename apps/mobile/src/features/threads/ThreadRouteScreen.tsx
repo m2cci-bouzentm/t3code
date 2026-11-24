@@ -130,6 +130,7 @@ import { openSettings } from "../settings/settings-navigation";
 import { ThreadInspectorHeader, type ThreadInspectorPresentation } from "./thread-inspector-header";
 import { InspectorContentScope, ThreadInspectorPreview } from "./thread-inspector-preview";
 import { useStartSideChat } from "./useStartSideChat";
+import { useStartSubagent } from "./useStartSubagent";
 import { useThreadStatusAnnouncements } from "./useThreadStatusAnnouncements";
 import type { ThreadInspectorMode, ThreadInspectorTarget } from "./thread-inspector-navigation";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
@@ -393,7 +394,8 @@ function ThreadRouteContent(
   const selectedThreadDetail = Option.getOrNull(selectedThreadDetailState.data);
   const { selectedThreadCwd } = useSelectedThreadWorktree();
   const startSideChat = useStartSideChat();
-  const composer = useThreadComposerState({ startSideChat });
+  const startSubagent = useStartSubagent();
+  const composer = useThreadComposerState({ startSideChat, startSubagent });
   const gitState = useSelectedThreadGitState();
   const gitActions = useSelectedThreadGitActions();
   const requests = useSelectedThreadRequests();

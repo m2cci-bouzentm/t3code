@@ -3,7 +3,9 @@ import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeThreadProjectionFixture } from "../test-fixtures";
-import { threadContextAttachment, threadTranscriptThroughRun } from "./threadContextAttachment";
+import { threadTranscriptThroughRun } from "@t3tools/client-runtime/state/thread-imported-history";
+
+import { threadContextAttachment } from "./threadContextAttachment";
 
 describe("threadTranscriptThroughRun", () => {
   it("keeps the rows up to the end of the run and leaves out the later rows", () => {

@@ -324,6 +324,7 @@ import {
 import { waitForThreadShell } from "./threadForkNavigation";
 import { resolveUserMessageIntentBadge } from "./userMessageIntentBadge";
 import { fileChipClipboardPath, fileChipMenu, resolveFileChipTarget } from "./fileChipMenu";
+import { useForkToMachine } from "./useForkToMachine";
 import { useFileChipShare } from "./useFileChipShare";
 import { useOpenLinkedThread } from "./useOpenLinkedThread";
 import { useOpenThreadLink } from "./useOpenThreadLink";
@@ -481,10 +482,26 @@ function AssistantForkButton(props: {
     capabilities: support.providerSession?.capabilities,
   });
   const runId = props.projectedItem.item.runId;
+  const machineFork = useForkToMachine({
+    environmentId: props.environmentId,
+    threadId: props.projectedItem.sourceThreadId,
+  });
 
   if (!canFork || runId === null) return null;
 
-  return (
+  const forkOnMachine = (environmentId: string) => {
+    const machine = machineFork.machines.find(
+      (candidate) => candidate.project.environmentId === environmentId,
+    );
+    if (machine === undefined) return;
+    setBusy(true);
+    void Haptics.selectionAsync();
+    void machineFork
+      .fork(machine, runId, `${props.sourceTitle} fork`)
+      .finally(() => setBusy(false));
+  };
+
+  const button = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={gt("Fork from this response")}
@@ -549,6 +566,19 @@ function AssistantForkButton(props: {
         />
       )}
     </Pressable>
+  );
+  if (machineFork.machines.length === 0) return button;
+  return (
+    <Menu
+      actions={machineFork.machines.map((machine) => ({
+        id: String(machine.project.environmentId),
+        title: gt("Fork on {machine}", { machine: machine.label }),
+      }))}
+      onPressAction={({ nativeEvent }) => forkOnMachine(nativeEvent.event)}
+      shouldOpenOnLongPress
+    >
+      {button}
+    </Menu>
   );
 }
 

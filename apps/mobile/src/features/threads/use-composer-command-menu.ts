@@ -150,6 +150,15 @@ export function buildComposerSlashCommandItems(
       });
     }
   }
+  if (input.hasThread && "subagent".includes(query)) {
+    items.push({
+      id: "cmd:subagent",
+      type: "slash-command",
+      command: "subagent",
+      label: "/subagent",
+      description: resolve(msg("Give a task to a subagent, which reports back here")),
+    });
+  }
   if (input.offersFreshSession && "clear".includes(query)) {
     items.push({
       id: "cmd:clear",

@@ -18,7 +18,6 @@ import {
   type EnvironmentId,
   type ThreadTicketStage,
 } from "@t3tools/contracts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useAtomValue } from "@effect/atom-react";
 import type { MenuAction } from "@react-native-menu/menu";
 import { msg, useGT, useMessages } from "gt-react-native";
@@ -34,17 +33,10 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Menu } from "../../components/ui/Menu";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import type { MessageResolver } from "../../i18n/messages";
-import {
-  buildModelOptions,
-  resolveDefaultableModelSelection,
-  resolveNewTaskModelSelection,
-} from "../../lib/modelOptions";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { uuidv4 } from "../../lib/uuid";
-import { appAtomRegistry } from "../../state/atom-registry";
 import { useProjects } from "../../state/entities";
 import { threadListEnvironmentsAtom } from "../../state/presentation";
-import { environmentServerConfigsAtom } from "../../state/server";
 import {
   environmentThreadShells,
   steadyNavigationThreadShellsAtom,
@@ -65,6 +57,7 @@ import {
   resolveThreadListV2Status,
   type ThreadListV2Status,
 } from "../threads/threadListV2";
+import { resolveNewThreadDefaults } from "../threads/newThreadDefaults";
 import { useThreadListNow } from "../threads/use-thread-list-now";
 
 const COLUMN_LABELS: Record<ThreadBoardColumn, string> = {
@@ -122,25 +115,6 @@ function moveTargets(thread: ThreadBoardThread, options: ThreadBoardOptions): Th
   return THREAD_BOARD_COLUMNS.filter(
     (target) => planThreadBoardMove(thread, target, options).length > 0,
   );
-}
-
-/** The model and mode a ticket made on the board starts with: the new-task defaults of its project. */
-function resolveTicketDefaults(project: EnvironmentProject) {
-  const config = appAtomRegistry.get(environmentServerConfigsAtom).get(project.environmentId);
-  if (config === undefined) return null;
-  const projectSettings = resolveProjectSettings(config.settings, project.id, project).settings;
-  const modelSelection = resolveNewTaskModelSelection({
-    draftSelection: null,
-    projectDefaultSelection: resolveDefaultableModelSelection(
-      config,
-      projectSettings.defaultModelSelection,
-      project.id,
-    ),
-    stickySelection: null,
-    modelOptions: buildModelOptions(config, null, undefined, project.id),
-  });
-  if (modelSelection === null) return null;
-  return { modelSelection, runtimeMode: projectSettings.defaultRuntimeMode };
 }
 
 function wakeLabel(snoozedUntil: string): string {
@@ -386,7 +360,7 @@ export function BoardScreen() {
     });
 
   const createTicket = async (project: EnvironmentProject, title: string) => {
-    const defaults = resolveTicketDefaults(project);
+    const defaults = resolveNewThreadDefaults(project);
     if (defaults === null) {
       Dialog.alert(
         m(msg("Could not add the ticket")),

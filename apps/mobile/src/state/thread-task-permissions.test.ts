@@ -250,7 +250,7 @@ import { questionAttachmentDraftKey } from "./question-attachments";
 import { startQuestionImagePreparation } from "./question-attachment-preparation";
 import { abortComposerDraftOperations } from "./composerDraftOperations";
 
-const NO_SIDE_CHATS = { startSideChat: async () => false };
+const NO_SIDE_CHATS = { startSideChat: async () => false, startSubagent: async () => false };
 
 beforeEach(() => {
   state.grantedEnvironments = new Set(["primary"]);
@@ -461,7 +461,10 @@ describe("mobile task permissions", () => {
       runtimeMode: "approval-required",
     };
     const startSideChat = vi.fn(async () => true);
-    const composer = useThreadComposerState({ startSideChat });
+    const composer = useThreadComposerState({
+      startSideChat,
+      startSubagent: NO_SIDE_CHATS.startSubagent,
+    });
     expect(composer.sideChatUnavailableReason).toBeNull();
     expect(await composer.onSendMessage()).toBeNull();
     expect(startSideChat).toHaveBeenCalledExactlyOnceWith(
@@ -492,7 +495,12 @@ describe("mobile task permissions", () => {
       ],
       context: { version: 1, records: [imageRecord] },
     };
-    expect(await useThreadComposerState({ startSideChat }).onSendMessage()).toBeNull();
+    expect(
+      await useThreadComposerState({
+        startSideChat,
+        startSubagent: NO_SIDE_CHATS.startSubagent,
+      }).onSendMessage(),
+    ).toBeNull();
     expect(startSideChat).toHaveBeenCalledExactlyOnceWith(
       { environmentId: "secondary", threadId: "thread" },
       expect.objectContaining({
@@ -517,7 +525,10 @@ describe("mobile task permissions", () => {
     const shot = { id: "shot", fileUri: "file:///shot.png" } as DraftComposerImageAttachment;
     const sent = { ...state.draft, attachments: [shot] };
     state.draft = sent;
-    const restoring = useThreadComposerState({ startSideChat });
+    const restoring = useThreadComposerState({
+      startSideChat,
+      startSubagent: NO_SIDE_CHATS.startSubagent,
+    });
     const restoreOrder: string[] = [];
     state.mergeDraft.mockImplementationOnce(async (_key, content) => {
       state.draft = { ...sent, text: "new text" };
@@ -539,7 +550,12 @@ describe("mobile task permissions", () => {
       providers: [{ instanceId: "codex", driver: "codex", enabled: false }],
     } as unknown as ServerConfig;
     state.draft = { ...state.draft, attachments: [] };
-    expect(await useThreadComposerState({ startSideChat }).onSendMessage()).toBeNull();
+    expect(
+      await useThreadComposerState({
+        startSideChat,
+        startSubagent: NO_SIDE_CHATS.startSubagent,
+      }).onSendMessage(),
+    ).toBeNull();
     expect(startSideChat).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledOnce();
   });

@@ -479,6 +479,10 @@
       "types": "./src/state/threadStage.ts",
       "default": "./src/state/threadStage.ts"
     },
+    "./state/thread-imported-history": {
+      "types": "./src/state/threadImportedHistory.ts",
+      "default": "./src/state/threadImportedHistory.ts"
+    },
     "./state/thread-board": {
       "types": "./src/state/threadBoard.ts",
       "default": "./src/state/threadBoard.ts"

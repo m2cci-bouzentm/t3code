@@ -5,7 +5,12 @@ import {
   presentPendingBackgroundWork,
   type PendingBackgroundWorkItem,
 } from "@t3tools/client-runtime/state/thread-execution";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  OrchestrationV2PendingBackgroundTask,
+  ThreadId,
+  TurnItemId,
+} from "@t3tools/contracts";
 import * as Haptics from "expo-haptics";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import { Pressable, ScrollView, View } from "react-native";
@@ -15,7 +20,10 @@ import { SheetHeader } from "../../components/ui/SheetHeader";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ScreenContent } from "../../components/ui/ScreenContent";
+import { cn } from "../../lib/cn";
 import { environmentThreadShells } from "../../state/threads";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
 
 const KIND_LABELS = {
   subagent: msg("Subagent"),
@@ -26,6 +34,28 @@ const KIND_LABELS = {
 
 type BackgroundWorkTarget = { readonly environmentId: EnvironmentId; readonly threadId: ThreadId };
 
+interface CommandOutputSource {
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly itemId: TurnItemId;
+}
+
+/** The output a background command streams, from the thread that ran it; null for other work. */
+function commandOutputSource(
+  tasks: ReadonlyArray<OrchestrationV2PendingBackgroundTask>,
+  item: PendingBackgroundWorkItem,
+  target: BackgroundWorkTarget,
+): CommandOutputSource | null {
+  if (item.kind !== "command") return null;
+  const task = tasks.find((candidate) => candidate.taskId === item.taskId);
+  if (task?.itemId === undefined) return null;
+  return {
+    environmentId: target.environmentId,
+    threadId: task.sourceThreadId ?? target.threadId,
+    itemId: task.itemId,
+  };
+}
+
 export function ThreadBackgroundWorkSheet({ route }: StaticScreenProps<BackgroundWorkTarget>) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -35,6 +65,8 @@ export function ThreadBackgroundWorkSheet({ route }: StaticScreenProps<Backgroun
   const thread = useAtomValue(
     environmentThreadShells.threadShellAtom(scopeThreadRef(target.environmentId, target.threadId)),
   );
+  const streamsOutput = useCommandOutputStreaming(target.environmentId);
+  const { themeAppearance } = useAppearancePreferences();
   const presentation = presentPendingBackgroundWork(thread?.pendingBackgroundTasks ?? [], m);
   const openThread = (threadId: ThreadId) => {
     void Haptics.selectionAsync();
@@ -57,7 +89,17 @@ export function ThreadBackgroundWorkSheet({ route }: StaticScreenProps<Backgroun
         </Text>
       ) : (
         presentation.items.map((item) => (
-          <BackgroundWorkRow key={item.taskId} item={item} onOpen={openThread} />
+          <BackgroundWorkRow
+            key={item.taskId}
+            item={item}
+            onOpen={openThread}
+            output={
+              streamsOutput
+                ? commandOutputSource(thread?.pendingBackgroundTasks ?? [], item, target)
+                : null
+            }
+            themeAppearance={themeAppearance}
+          />
         ))
       )}
     </ScrollView>
@@ -73,13 +115,20 @@ export function ThreadBackgroundWorkSheet({ route }: StaticScreenProps<Backgroun
 function BackgroundWorkRow(props: {
   readonly item: PendingBackgroundWorkItem;
   readonly onOpen: (threadId: ThreadId) => void;
+  readonly output: CommandOutputSource | null;
+  readonly themeAppearance: "light" | "dark";
 }) {
-  const { item } = props;
+  const { item, output } = props;
   const gt = useGT();
   const m = useMessages();
   const childThreadId = item.childThreadId;
   const row = (
-    <View className="flex-row items-center gap-3 border-b border-border py-3.5">
+    <View
+      className={cn(
+        "flex-row items-center gap-3 py-3.5",
+        output === null && "border-b border-border",
+      )}
+    >
       <SymbolView
         name={
           item.kind === "subagent" ? "person.2" : item.kind === "monitor" ? "clock" : "terminal"
@@ -97,6 +146,19 @@ function BackgroundWorkRow(props: {
       )}
     </View>
   );
+  if (output !== null) {
+    return (
+      <View className="border-b border-border pb-3">
+        <View accessible>{row}</View>
+        <ThreadCommandOutput
+          environmentId={output.environmentId}
+          threadId={output.threadId}
+          itemId={output.itemId}
+          themeAppearance={props.themeAppearance}
+        />
+      </View>
+    );
+  }
   return childThreadId === undefined ? (
     <View accessible>{row}</View>
   ) : (

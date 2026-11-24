@@ -28,7 +28,7 @@ import { resolveNewThreadDefaults } from "~/lib/newThreadDefaults";
 import {
   importedHistoryFromTranscript,
   threadTranscriptThroughRun,
-} from "~/lib/threadContextAttachment";
+} from "@t3tools/client-runtime/state/thread-imported-history";
 import { orchestrationEnvironment } from "~/state/orchestration";
 import { useScratchProject } from "../../hooks/useScratchProject";
 import { type EnvironmentPresentation, useEnvironments } from "../../state/environments";

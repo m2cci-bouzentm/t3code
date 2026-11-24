@@ -219,12 +219,25 @@ export function useThreadDraftForThread(input: {
   };
 }
 
+/** The task of a `/subagent <task>` message, empty when only the command was typed; null for other text. */
+function parseSubagentCommand(text: string): string | null {
+  const match = /^\/subagent(?:\s+([\s\S]*))?$/.exec(text);
+  if (match === null) return null;
+  return (match[1] ?? "").trim();
+}
+
 export function useThreadComposerState(input: {
   /** Forks the thread into a side chat that gets `message`; resolves false when it did not start. */
   readonly startSideChat: (
     source: ScopedThreadRef,
     message: SideChatMessage,
     settings: { readonly runtimeMode: RuntimeMode; readonly modelSelection: ModelSelection },
+  ) => Promise<boolean>;
+  /** Starts a subagent of the thread that gets `task`; resolves false when it did not start. */
+  readonly startSubagent: (
+    parent: ScopedThreadRef,
+    task: string,
+    modelSelection: ModelSelection,
   ) => Promise<boolean>;
 }) {
   const {
@@ -770,6 +783,34 @@ export function useThreadComposerState(input: {
         startingSideChatRef.current = false;
         for (const release of fileHolds) release();
       }
+      return null;
+    }
+    const subagentTask = beforeDispatch === undefined ? parseSubagentCommand(text) : null;
+    if (subagentTask !== null) {
+      if (subagentTask.length === 0) {
+        Dialog.alert(
+          m(msg("Give the subagent a task")),
+          m(msg("Type the task after {command}, then send it.", { command: "/subagent" })),
+        );
+        return null;
+      }
+      if (thread.latestRun == null) {
+        Dialog.alert(
+          m(msg("Subagent not started")),
+          m(msg("Send the thread a first message, then start a subagent.")),
+        );
+        return null;
+      }
+      if (modelUnavailable) {
+        alertModelUnavailable();
+        return null;
+      }
+      const started = await input.startSubagent(
+        { environmentId: thread.environmentId, threadId: thread.id },
+        subagentTask,
+        modelSelection,
+      );
+      if (started) clearComposerDraftContent(threadKey);
       return null;
     }
     // A redirect's text answers its approval, so /clear there is that text, not the command.
