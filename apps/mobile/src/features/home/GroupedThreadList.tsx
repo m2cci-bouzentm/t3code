@@ -4,6 +4,8 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import { resolveThreadStage } from "@t3tools/client-runtime/state/thread-stage";
 import type { EnvironmentId, SidebarProjectGroupingMode } from "@t3tools/contracts";
+import * as Arr from "effect/Array";
+import * as Order from "effect/Order";
 import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -27,6 +29,16 @@ interface ThreadGroup {
 
 const NO_PROJECT_KEY = "no-project";
 
+const NEWEST_THREAD_FIRST = Order.mapInput(
+  Order.flip(Order.String),
+  (thread: EnvironmentThreadShell) => thread.updatedAt,
+);
+const NEWEST_GROUP_FIRST = Order.mapInput(
+  Order.flip(Order.String),
+  (group: { readonly threads: ReadonlyArray<EnvironmentThreadShell> }) =>
+    group.threads[0]!.updatedAt,
+);
+
 function isThreadInScope(thread: EnvironmentThreadShell, scope: HomeProjectScope): boolean {
   return scope.projectRefs.some(
     (ref) => ref.environmentId === thread.environmentId && ref.projectId === thread.projectId,
@@ -47,20 +59,24 @@ function groupThreads(input: {
   readonly now: string;
   readonly query: string;
 }): ThreadGroup[] {
-  const listed = input.threads
-    .filter((thread) => resolveThreadStage(thread, { now: input.now }) === "open")
-    .filter((thread) => matchesSearch(thread, input.query))
-    .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  const groups = input.scopes
-    .map((scope) => ({
-      key: scope.key,
-      scope,
-      threads: listed.filter((thread) => isThreadInScope(thread, scope)),
-    }))
-    .filter((group) => group.threads.length > 0)
-    .toSorted((left, right) =>
-      right.threads[0]!.updatedAt.localeCompare(left.threads[0]!.updatedAt),
-    );
+  const listed = Arr.sort(
+    input.threads.filter(
+      (thread) =>
+        resolveThreadStage(thread, { now: input.now }) === "open" &&
+        matchesSearch(thread, input.query),
+    ),
+    NEWEST_THREAD_FIRST,
+  );
+  const groups = Arr.sort(
+    input.scopes
+      .map((scope) => ({
+        key: scope.key,
+        scope,
+        threads: listed.filter((thread) => isThreadInScope(thread, scope)),
+      }))
+      .filter((group) => group.threads.length > 0),
+    NEWEST_GROUP_FIRST,
+  );
   const grouped = new Set(groups.flatMap((group) => group.threads));
   const ungrouped = listed.filter((thread) => !grouped.has(thread));
   if (ungrouped.length === 0) return groups;
