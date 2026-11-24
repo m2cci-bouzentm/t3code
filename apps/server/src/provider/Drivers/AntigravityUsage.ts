@@ -100,7 +100,7 @@ const make = Effect.gen(function* () {
       ),
     );
     roots.push(...registryRoots.flat());
-    for (const { instanceId } of instances.filter((instance) => instance.configured)) {
+    for (const { instanceId } of instances) {
       const directories = yield* resolveAntigravityInstanceDirectories(
         host.paths.stateDir,
         instanceId,

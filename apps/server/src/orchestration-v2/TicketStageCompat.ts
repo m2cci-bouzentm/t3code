@@ -20,6 +20,8 @@ import { identity } from "effect/Function";
 import { HttpBody, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as Socket from "effect/socket/Socket";
 
+import { withSocketHeartbeat } from "../socketHeartbeat.ts";
+
 const ORCHESTRATION_HTTP_PATH_PREFIX = "/api/orchestration/";
 const NO_OVERRIDE_FIELD = '"settledOverride":null';
 const TICKET_STAGE_FIELDS = ThreadTicketStage.literals.map(
@@ -66,7 +68,7 @@ export function serveSocketClientWithoutTicketStages<A, E, R>(
     ? splitLargeSocketFrames
     : identity<Socket.Socket>;
   const upgrade = Effect.map(request.upgrade, (socket) =>
-    hideTicketStagesOnSocket(frameSocket(socket)),
+    withSocketHeartbeat(hideTicketStagesOnSocket(frameSocket(socket))),
   );
   return rpcWebSocketHttpEffect.pipe(
     Effect.provideService(
