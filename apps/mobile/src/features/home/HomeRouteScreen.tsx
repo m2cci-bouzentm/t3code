@@ -42,7 +42,10 @@ import { WorkspaceListEmptyDetail } from "../layout/workspace/WorkspaceListEmpty
 import { WorkspaceListHeader } from "../layout/workspace/WorkspaceListHeader";
 import { buildHomeListFilterMenuItems, homeListFilterEnvironments } from "./home-list-filter-menu";
 import { useListedThreadShells } from "../threads/use-listed-thread-shells";
-import { useGroupThreadsByProject } from "../settings/ThreadListGroupingSection";
+import {
+  useGroupThreadsByProject,
+  useProjectSortOrder,
+} from "../settings/ThreadListGroupingSection";
 import { GroupedThreadList } from "./GroupedThreadList";
 
 export function HomeRouteScreen() {
@@ -54,6 +57,7 @@ export function HomeRouteScreen() {
   const selectDetail = useSelectWorkspaceDetail();
   const projects = useProjects();
   const groupThreadsByProject = useGroupThreadsByProject();
+  const projectSortOrder = useProjectSortOrder();
   // Stop rebuilding the streaming thread list while Thread covers Home.
   const visible = useHomeRouteVisible();
   const threads = useLaunchingThreads(
@@ -143,13 +147,13 @@ export function HomeRouteScreen() {
           scopes: projectScopes,
           threads,
           pendingTasks: [],
-          projectSortOrder: "updated_at",
+          projectSortOrder,
         }),
       ).map((scope) => ({
         key: scope.key,
         label: scope.title,
       })),
-    [projectScopes, threads],
+    [projectScopes, threads, projectSortOrder],
   );
   const selectedProjectKey =
     resolveHomeProjectFilterScope(projectScopes, projects, listOptions)?.key ?? null;
@@ -241,7 +245,6 @@ export function HomeRouteScreen() {
             pendingTasks={pendingTasks}
             projectGroupingMode={listOptions.projectGroupingMode}
             projects={projects}
-            projectSortOrder={listOptions.projectSortOrder}
             savedConnectionsById={savedConnectionsById}
             searchQuery={searchQuery}
             selectedEnvironmentId={selectedEnvironmentId}

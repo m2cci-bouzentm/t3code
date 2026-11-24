@@ -18,7 +18,12 @@ import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { useEnvironments } from "../../state/environments";
 import { ThreadCard } from "../threads/ThreadCard";
 import { useThreadListNow } from "../threads/use-thread-list-now";
-import { buildHomeProjectScopes, type HomeProjectScope } from "./homeThreadList";
+import { useProjectSortOrder } from "../settings/ThreadListGroupingSection";
+import {
+  buildHomeProjectScopes,
+  sortHomeProjectScopes,
+  type HomeProjectScope,
+} from "./homeThreadList";
 import { ProjectColorSheet } from "./ProjectColorSheet";
 
 interface ThreadGroup {
@@ -33,9 +38,6 @@ const NEWEST_THREAD_FIRST = Order.mapInput(
   Order.flip(Order.String),
   (thread: EnvironmentThreadShell) => thread.updatedAt,
 );
-const PROJECT_A_TO_Z = Order.mapInput(Order.String, (group: { readonly scope: HomeProjectScope }) =>
-  group.scope.title.toLocaleLowerCase(),
-);
 
 function isThreadInScope(thread: EnvironmentThreadShell, scope: HomeProjectScope): boolean {
   return scope.projectRefs.some(
@@ -48,9 +50,9 @@ function matchesSearch(thread: EnvironmentThreadShell, query: string): boolean {
 }
 
 /**
- * Each project with its active threads, like the desktop sidebar: projects A to Z so they keep
- * their places, threads newest first. The threads of no listed project come last under
- * "No project". Empty projects are left out.
+ * Each project with its active threads, like the desktop sidebar: projects in the given order,
+ * threads newest first. The threads of no listed project come last under "No project".
+ * Empty projects are left out.
  */
 function groupThreads(input: {
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
@@ -66,16 +68,13 @@ function groupThreads(input: {
     ),
     NEWEST_THREAD_FIRST,
   );
-  const groups = Arr.sort(
-    input.scopes
-      .map((scope) => ({
-        key: scope.key,
-        scope,
-        threads: listed.filter((thread) => isThreadInScope(thread, scope)),
-      }))
-      .filter((group) => group.threads.length > 0),
-    PROJECT_A_TO_Z,
-  );
+  const groups = input.scopes
+    .map((scope) => ({
+      key: scope.key,
+      scope,
+      threads: listed.filter((thread) => isThreadInScope(thread, scope)),
+    }))
+    .filter((group) => group.threads.length > 0);
   const grouped = new Set(groups.flatMap((group) => group.threads));
   const ungrouped = listed.filter((thread) => !grouped.has(thread));
   if (ungrouped.length === 0) return groups;
@@ -144,16 +143,22 @@ export function GroupedThreadList(props: {
   const insets = useSafeAreaInsets();
   const now = useThreadListNow(props.threads);
   const { environments } = useEnvironments();
+  const projectSortOrder = useProjectSortOrder();
 
   const machineLabels = new Map(environments.map((entry) => [entry.environmentId, entry.label]));
-  const scopes = buildHomeProjectScopes(
-    {
-      projects: props.projects,
-      environmentId: props.selectedEnvironmentId,
-      projectGroupingMode: props.projectGroupingMode,
-    },
-    m,
-  ).filter((scope) => props.selectedProjectKey === null || scope.key === props.selectedProjectKey);
+  const scopes = sortHomeProjectScopes({
+    scopes: buildHomeProjectScopes(
+      {
+        projects: props.projects,
+        environmentId: props.selectedEnvironmentId,
+        projectGroupingMode: props.projectGroupingMode,
+      },
+      m,
+    ).filter((scope) => props.selectedProjectKey === null || scope.key === props.selectedProjectKey),
+    threads: props.threads,
+    pendingTasks: [],
+    projectSortOrder,
+  });
   const groups = groupThreads({
     threads: props.threads,
     scopes,

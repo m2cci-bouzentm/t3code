@@ -117,12 +117,20 @@ export function findHomeProjectScope(
   );
 }
 
+const PROJECT_SCOPE_A_TO_Z = Order.mapInput(
+  Order.Struct({ title: Order.String, key: Order.String }),
+  (scope: HomeProjectScope) => ({ title: scope.title.toLocaleLowerCase(), key: scope.key }),
+);
+
 export function sortHomeProjectScopes(input: {
   readonly scopes: ReadonlyArray<HomeProjectScope>;
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly pendingTasks: ReadonlyArray<PendingNewTask>;
   readonly projectSortOrder: HomeProjectSortOrder;
 }): ReadonlyArray<HomeProjectScope> {
+  if (input.projectSortOrder === "alphabetical") {
+    return Arr.sort(input.scopes, PROJECT_SCOPE_A_TO_Z);
+  }
   const scopeKeyByProjectRef = new Map(
     input.scopes.flatMap((scope) =>
       scope.projectRefs.map(

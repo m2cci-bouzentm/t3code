@@ -94,9 +94,9 @@ import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
 import {
   buildHomeProjectScopes,
   findHomeProjectScope,
-  type HomeProjectSortOrder,
   sortHomeProjectScopes,
 } from "./homeThreadList";
+import { useProjectSortOrder } from "../settings/ThreadListGroupingSection";
 import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
 import { useFabScroll } from "./FabScrollContext";
@@ -119,7 +119,6 @@ interface HomeScreenProps {
   readonly searchQuery: string;
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKey: string | null;
-  readonly projectSortOrder: HomeProjectSortOrder;
   readonly projectGroupingMode: SidebarProjectGroupingMode;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
@@ -196,6 +195,7 @@ function renderHomeScrollView(props: ScrollViewProps) {
 export function HomeScreen(props: HomeScreenProps) {
   const gt = useGT();
   const m = useMessages();
+  const projectSortOrder = useProjectSortOrder();
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const workspace = useWorkspaceTabs();
   const [initialScrollOffset] = useState(() => workspace?.getScrollOffset("threads") ?? 0);
@@ -692,7 +692,7 @@ export function HomeScreen(props: HomeScreenProps) {
               scopes: projectScopes,
               threads: props.threads,
               pendingTasks: [],
-              projectSortOrder: "updated_at",
+              projectSortOrder,
             }),
           ).map((scope) => ({
             key: scope.key,

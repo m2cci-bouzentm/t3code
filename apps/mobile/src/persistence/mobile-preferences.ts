@@ -133,6 +133,10 @@ const ThreadProject = Schema.Struct({
 });
 const isThreadProject = Schema.is(ThreadProject);
 
+/** The project orders the phone offers; the desktop's manual order needs drag and drop. */
+const ProjectSortOrder = Schema.Literals(["updated_at", "created_at", "alphabetical"]);
+export type ProjectSortOrder = typeof ProjectSortOrder.Type;
+
 export interface Preferences {
   readonly navigationTabOrder?: readonly string[];
   readonly hiddenNavigationTabs?: readonly string[];
@@ -141,6 +145,8 @@ export interface Preferences {
   readonly pullRequestHideTestFiles?: boolean;
   /** The Threads tab lists each project with its threads, like the desktop sidebar. */
   readonly groupThreadsByProject?: boolean;
+  /** How the Threads tab orders projects: by last user message, creation or title. */
+  readonly projectSortOrder?: ProjectSortOrder;
   /** Which hidden-by-default PR activity is shown: bot comments and resolved or dismissed ones. */
   readonly pullRequestActivityVisibility?: PullRequestActivityVisibility;
   readonly pullRequestMergeMethod?: PullRequestMergeMethod;
@@ -228,6 +234,7 @@ export class MobilePreferencesStore extends Context.Service<
 
 const isToolCallVisibility = Schema.is(ToolCallVisibility);
 const isPullRequestMergeMethod = Schema.is(PullRequestMergeMethod);
+const isProjectSortOrder = Schema.is(ProjectSortOrder);
 
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
@@ -236,6 +243,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     sharedSlotTab?: "pullRequests" | "issues";
     pullRequestHideTestFiles?: boolean;
     groupThreadsByProject?: boolean;
+    projectSortOrder?: ProjectSortOrder;
     pullRequestActivityVisibility?: PullRequestActivityVisibility;
     pullRequestMergeMethod?: PullRequestMergeMethod;
     liveActivitiesEnabled?: boolean;
@@ -297,6 +305,10 @@ function sanitizePreferences(parsed: Preferences): Preferences {
 
   if (typeof parsed.groupThreadsByProject === "boolean") {
     preferences.groupThreadsByProject = parsed.groupThreadsByProject;
+  }
+
+  if (isProjectSortOrder(parsed.projectSortOrder)) {
+    preferences.projectSortOrder = parsed.projectSortOrder;
   }
 
   if (isPullRequestActivityVisibility(parsed.pullRequestActivityVisibility)) {

@@ -56,6 +56,7 @@ import {
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "../home/homeThreadList";
+import { useProjectSortOrder } from "../settings/ThreadListGroupingSection";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
 import { useThreadListActions } from "../home/useThreadListActions";
@@ -124,6 +125,7 @@ export function ThreadNavigationSidebar(props: ThreadNavigationSidebarProps) {
 function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   const gt = useGT();
   const messages = useMessages();
+  const projectSortOrder = useProjectSortOrder();
   const floatingTabsEnabled = useAndroidFloatingTabs();
   const { themeVariables: materialTheme } = useAppearancePreferences();
   const drawerColor = materialTheme["--color-drawer"];
@@ -194,7 +196,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
       scopes: projectScopes,
       threads,
       pendingTasks: [],
-      projectSortOrder: "updated_at",
+      projectSortOrder,
     }),
   ).map((scope) => ({
     key: scope.key,
