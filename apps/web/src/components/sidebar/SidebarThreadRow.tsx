@@ -115,7 +115,12 @@ import {
   ThreadSearchPullRequestNumber,
 } from "../ThreadStatusIndicators";
 import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
-import { useThreadShell } from "../../state/entities";
+import { useServerConfigs, useThreadShell } from "../../state/entities";
+import { projectColorBarClassName } from "../../projectIconColors";
+import {
+  projectColorsByEnvironment,
+  resolveThreadProjectColor,
+} from "@t3tools/client-runtime/state/project-colors";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { ThreadSearchMatchExcerpt } from "../ThreadSearchMatch";
 import { makeWorkspaceFileDropHandlers } from "../chat/workspaceFileDrop";
@@ -707,6 +712,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  const projectColor = resolveThreadProjectColor(
+    thread,
+    projectColorsByEnvironment(useServerConfigs()),
+  );
   const { leaseLiveStatus, rowRef: leaseRowRef } = useSidebarRowSubscriptionLease(props.isActive);
   const { revealRef } = props;
   const rowRef = (row: HTMLElement | null) => {
@@ -1028,6 +1037,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isFileDragOver && !props.isActive && !isSelected && "bg-sidebar-row-hover",
     props.sortable?.isDragging &&
       "bg-sidebar bg-linear-to-b from-sidebar-row-active to-sidebar-row-active text-sidebar-foreground opacity-100 shadow-lg",
+    projectColor !== null &&
+      cn(
+        "before:pointer-events-none before:absolute before:inset-y-1.5 before:left-0.5 before:z-20 before:w-[3px] before:rounded-full before:content-['']",
+        projectColorBarClassName(projectColor),
+      ),
   );
   const sortable = props.sortable;
   const sortableRootProps = sortable

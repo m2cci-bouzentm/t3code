@@ -28,6 +28,7 @@ import { BranchNamingSettings } from "./components/BranchNamingSettings";
 import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
 import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
+import { ThreadListGroupingSection } from "./ThreadListGroupingSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { IssueTrackerSection } from "./components/IssueTrackerSection";
 import { SourceControlProvidersSection } from "./components/SourceControlProvidersSection";
@@ -302,6 +303,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
         contentContainerClassName="gap-6 px-5 pt-4"
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
       >
+        {props.page === "threads" ? <ThreadListGroupingSection /> : null}
         {!hasConnectedSelection || reference === null ? (
           <Text className="px-2 text-base text-foreground-muted">
             {projectSelected

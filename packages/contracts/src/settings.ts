@@ -35,7 +35,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
-import { ProjectScript, type ProjectMutation } from "./project.ts";
+import { ProjectIconColor, ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
@@ -1494,6 +1494,10 @@ export const ServerSettings = Schema.Struct({
   snoozePresets: SnoozePresetSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SNOOZE_PRESETS)),
   ),
+  /** The color of each project's threads in thread lists. A client sets it on every machine's copy of a project. */
+  projectColors: Schema.Record(ProjectId, ProjectIconColor).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   /** Clients hide threads with these tags while `hideTaggedThreads` is on. Bad entries drop alone, so a hand edit cannot reset settings. */
   hiddenThreadTags: Schema.Array(Schema.Unknown).pipe(
     Schema.decodeTo(
@@ -1948,6 +1952,7 @@ export const ServerSettingsPatch = Schema.Struct({
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
+  projectColors: Schema.optionalKey(Schema.Record(ProjectId, ProjectIconColor)),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),

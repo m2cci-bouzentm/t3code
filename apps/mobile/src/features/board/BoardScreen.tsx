@@ -11,7 +11,7 @@ import {
   type ThreadBoardStep,
   type ThreadBoardThread,
 } from "@t3tools/client-runtime/state/thread-board";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ThreadId,
@@ -22,11 +22,9 @@ import { useAtomValue } from "@effect/atom-react";
 import type { MenuAction } from "@react-native-menu/menu";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { RelativeTime } from "../../components/RelativeTime";
-import { AppText as Text } from "../../components/ui/AppText";
 import { Chip } from "../../components/ui/Chip";
 import * as Dialog from "../../components/ui/Dialog";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -55,9 +53,9 @@ import {
   resolveThreadListV2SnoozeMenuSelection,
   resolveThreadListV2SnoozePresets,
   resolveThreadListV2Status,
-  type ThreadListV2Status,
 } from "../threads/threadListV2";
 import { resolveNewThreadDefaults } from "../threads/newThreadDefaults";
+import { ThreadCard } from "../threads/ThreadCard";
 import { useThreadListNow } from "../threads/use-thread-list-now";
 
 const COLUMN_LABELS: Record<ThreadBoardColumn, string> = {
@@ -78,17 +76,6 @@ const MOVE_LABELS: Record<ThreadBoardColumn, string> = {
   snoozed: msg("Move to Snoozed"),
   settled: msg("Settle"),
   archived: msg("Archive"),
-};
-
-const STATUS_LABELS: Record<ThreadListV2Status, string | null> = {
-  approval: msg("Needs approval"),
-  input: msg("Needs input"),
-  request: msg("Guest request"),
-  working: msg("Working"),
-  waiting: msg("Waiting"),
-  failed: msg("Failed"),
-  limited: msg("Usage limit"),
-  ready: null,
 };
 
 function boardOptions(now: string): ThreadBoardOptions {
@@ -117,27 +104,15 @@ function moveTargets(thread: ThreadBoardThread, options: ThreadBoardOptions): Th
   );
 }
 
-function wakeLabel(snoozedUntil: string): string {
-  return new Date(snoozedUntil).toLocaleString([], {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function BoardCard(props: {
   readonly thread: ThreadBoardThread;
-  readonly column: ThreadBoardColumn;
   readonly projectTitle: string | undefined;
   readonly now: string;
   readonly actions: MenuAction[];
   readonly onAction: (thread: ThreadBoardThread, event: string) => void;
   readonly onOpen: (thread: ThreadBoardThread) => void;
 }) {
-  const m = useMessages();
   const { thread } = props;
-  const statusLabel = STATUS_LABELS[resolveThreadListV2Status(thread)];
-  const isSnoozed = effectiveSnoozed(thread, { now: props.now });
   return (
     <Menu
       accessibilityLabel={thread.title}
@@ -145,30 +120,12 @@ function BoardCard(props: {
       onPressAction={({ nativeEvent }) => props.onAction(thread, nativeEvent.event)}
       shouldOpenOnLongPress
     >
-      <Pressable
-        accessibilityRole="button"
-        className="mx-4 mb-2 gap-1 rounded-xl border border-border-subtle bg-card px-4 py-3 active:bg-subtle"
-        onPress={() => props.onOpen(thread)}
-      >
-        <View className="flex-row items-center gap-2">
-          <Text className="min-w-0 flex-1 text-xs text-foreground-muted" numberOfLines={1}>
-            {props.projectTitle}
-          </Text>
-          {statusLabel === null ? null : (
-            <Text className="font-t3-medium text-xs text-warning-foreground">{m(statusLabel)}</Text>
-          )}
-        </View>
-        <Text className="font-t3-medium text-base text-foreground" numberOfLines={2}>
-          {thread.title}
-        </Text>
-        <Text className="text-xs text-foreground-muted">
-          {isSnoozed && thread.snoozedUntil !== null ? (
-            m(msg("Wakes {time}", { time: wakeLabel(thread.snoozedUntil) }))
-          ) : (
-            <RelativeTime timestamp={thread.updatedAt} />
-          )}
-        </Text>
-      </Pressable>
+      <ThreadCard
+        thread={thread}
+        subtitle={props.projectTitle}
+        now={props.now}
+        onOpen={props.onOpen}
+      />
     </Menu>
   );
 }
@@ -475,7 +432,6 @@ export function BoardScreen() {
           <BoardCard
             key={scopedThreadKey(thread.environmentId, thread.id)}
             thread={thread}
-            column={selectedColumn}
             projectTitle={titles.get(scopedProjectKey(thread.environmentId, thread.projectId))}
             now={now}
             actions={cardActions({

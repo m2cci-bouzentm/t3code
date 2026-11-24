@@ -475,6 +475,10 @@
       "types": "./src/state/threadSettled.ts",
       "default": "./src/state/threadSettled.ts"
     },
+    "./state/project-colors": {
+      "types": "./src/state/projectColors.ts",
+      "default": "./src/state/projectColors.ts"
+    },
     "./state/thread-stage": {
       "types": "./src/state/threadStage.ts",
       "default": "./src/state/threadStage.ts"

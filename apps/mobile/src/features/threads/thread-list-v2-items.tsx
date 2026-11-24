@@ -45,6 +45,7 @@ import type { ThreadListProvider } from "../../state/thread-list-environments";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
+import { ProjectColorBar } from "./ProjectColorBar";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import {
@@ -1656,6 +1657,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         }}
         style={rowAppearance.cardStyle}
       >
+        <ProjectColorBar thread={thread} className="bottom-2 left-1 top-2 w-[3px] rounded-full" />
         {sidebarPane ? (
           fadedCardContent
         ) : (
@@ -1683,6 +1685,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         }}
         style={rowAppearance.style}
       >
+        <ProjectColorBar thread={thread} className="bottom-2 left-1 top-2 w-[3px] rounded-full" />
         <View
           className={cn(
             THREAD_LIST_V2_ROW_CONTENT_CLASS_NAME,

@@ -285,6 +285,7 @@ import {
   SidebarProjectFolderHeader,
   sidebarFolderRowId,
 } from "./sidebar/SidebarProjectFolderHeader";
+import { ProjectColorPopover, type ProjectColorTarget } from "./sidebar/ProjectColorPopover";
 import {
   SidebarDragBoundary,
   SidebarSectionHeader,
@@ -1040,6 +1041,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const highlightedProjectScopeKeyRef = useRef<string | null>(null);
   // Hold dropped rows until server placement is confirmed; block another pickup from replacing the hold.
   const [optimisticDrop, setOptimisticDrop] = useState<SidebarOptimisticDrop | null>(null);
+  const [projectColorTarget, setProjectColorTarget] = useState<ProjectColorTarget | null>(null);
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [searchHighlightKey, setSearchHighlightKey] = useState<string | null>(null);
@@ -1306,6 +1308,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       : { id: "pin", label: gt("Pin project"), icon: "pin" },
                   ]
                 : []),
+              { id: "project-color", label: gt("Color…", { $context: "project color picker" }) },
               { id: "project-settings", label: gt("Project settings"), icon: "settings" },
             ],
             position,
@@ -1316,6 +1319,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         switch (clicked.value) {
           case "new-thread":
             startThreadInProjectFolder(group);
+            return;
+          case "project-color":
+            setProjectColorTarget({ group, position });
             return;
           case "copy-path":
             copyPathToClipboard(group.workspaceRoot, { path: group.workspaceRoot });
@@ -3816,6 +3822,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         </SidebarGroup>
       </SidebarContent>
       <SidebarChromeFooter />
+      <ProjectColorPopover
+        target={projectColorTarget}
+        onClose={() => setProjectColorTarget(null)}
+      />
     </SidebarFolderDrop>
   );
 }
