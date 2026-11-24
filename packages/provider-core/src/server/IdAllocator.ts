@@ -29,6 +29,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
+import {
+  DELEGATED_TASK_THREAD_PREFIX,
+  delegatedTaskThreadId,
+} from "@t3tools/shared/delegatedTaskThread";
+
 import { randomUuidV4 } from "./randomUuid.ts";
 
 export const IdAllocatorV2Kind = Schema.Literals([
@@ -271,8 +276,6 @@ const randomId =
       ),
     );
 
-const DELEGATED_TASK_THREAD_PREFIX = joinId("thread", "delegated-task", "");
-
 export const isDelegatedTaskThread = (threadId: ThreadId): boolean =>
   threadId.startsWith(DELEGATED_TASK_THREAD_PREFIX);
 
@@ -282,8 +285,7 @@ export const derive: IdAllocatorV2Derive = {
       joinId("provider-session", "provider-instance", input.providerInstanceId, "shared"),
     ),
   delegatedTaskNode: (input) => NodeId.make(joinId("node", "delegated-task", input.commandId)),
-  delegatedTaskThread: (input) =>
-    ThreadId.make(`${DELEGATED_TASK_THREAD_PREFIX}${encodePart(input.commandId)}`),
+  delegatedTaskThread: (input) => delegatedTaskThreadId(input.commandId),
   delegatedTaskMessage: (input) =>
     MessageId.make(joinId("message", "delegated-task", input.commandId)),
   delegatedTaskTurnItem: (input) =>

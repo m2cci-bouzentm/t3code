@@ -33,7 +33,7 @@ import {
   type UploadChatAttachment,
   type GuestMessageId,
 } from "@t3tools/contracts";
-import { derive as deriveOrchestrationId } from "@t3tools/provider-core/server/IdAllocator";
+import { delegatedTaskThreadId } from "@t3tools/shared/delegatedTaskThread";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -1199,7 +1199,7 @@ export const delegateTask = Effect.fn("EnvironmentCommands.delegateTask")(functi
     interactionMode: projection.thread.interactionMode,
     completionWake: "always",
   });
-  return deriveOrchestrationId.delegatedTaskThread({ commandId });
+  return delegatedTaskThreadId(commandId);
 });
 
 export const mergeThreadBack = Effect.fn("EnvironmentCommands.mergeThreadBack")(function* (
