@@ -8,7 +8,7 @@ import { cn } from "../../lib/utils";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { resolveThreadStatusPill } from "../Sidebar.logic";
+import { resolveSidebarThreadStatus, resolveThreadStatusPill } from "../Sidebar.logic";
 import { snoozeWakeLabel, type SnoozePreset } from "../Sidebar.snooze";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -36,7 +36,7 @@ import {
   type ThreadBoardColumn,
   type ThreadBoardOrderAssignment,
   type ThreadBoardThread,
-} from "./threadBoard.logic";
+} from "@t3tools/client-runtime/state/thread-board";
 
 /** A project as the sidebar groups it: its copies on every machine are one project. */
 export type BoardProject = SidebarProjectSnapshot;
@@ -217,7 +217,11 @@ function ThreadBoardCard(props: {
   const { thread, column, project } = props;
   const pill = resolveThreadStatusPill({ thread });
   const moveTargets = THREAD_BOARD_COLUMNS.filter(
-    (target) => planThreadBoardMove(thread, target, { now: props.now }).length > 0,
+    (target) =>
+      planThreadBoardMove(thread, target, {
+        now: props.now,
+        status: resolveSidebarThreadStatus,
+      }).length > 0,
   );
 
   const canSnoozeThread = column !== "archived" && canSnooze(thread, { now: props.now });
@@ -400,6 +404,7 @@ export function ThreadBoard(props: {
   const [dropTarget, setDropTarget] = useState<BoardDropTarget | null>(null);
 
   const { now, filters } = props;
+  const boardOptions = { now, status: resolveSidebarThreadStatus };
   const projectByMemberKey = indexBoardProjects(props.allProjects);
   const scopedProject = props.projects.find((project) => project.projectKey === filters.projectKey);
   const scopedThreads = scopedProject
@@ -423,8 +428,8 @@ export function ThreadBoard(props: {
       : scopedThreads.filter((thread) =>
           isThreadOfProjects(thread, projectByMemberKey, quickProjectKeys),
         );
-  const columns = groupThreadsByBoardColumn(shownThreads, { now });
-  const unfilteredColumns = groupThreadsByBoardColumn(props.threads, { now });
+  const columns = groupThreadsByBoardColumn(shownThreads, boardOptions);
+  const unfilteredColumns = groupThreadsByBoardColumn(props.threads, boardOptions);
   const ticketProjects = props.projects.filter((project) => !project.isScratch);
   const filteredTicketProject = resolveFilteredTicketProject({
     scopedProject,
@@ -442,9 +447,9 @@ export function ThreadBoard(props: {
 
   const handleDragOver = (event: DragEvent<HTMLElement>, target: BoardDropTarget) => {
     if (draggedThread === null) return;
-    const isSameColumn = resolveThreadBoardColumn(draggedThread, { now }) === target.column;
+    const isSameColumn = resolveThreadBoardColumn(draggedThread, boardOptions) === target.column;
     const isOrderDrop = isSameColumn && isThreadBoardOrderedColumn(target.column);
-    const isMoveDrop = planThreadBoardMove(draggedThread, target.column, { now }).length > 0;
+    const isMoveDrop = planThreadBoardMove(draggedThread, target.column, boardOptions).length > 0;
     if (!isOrderDrop && !isMoveDrop) return;
     event.preventDefault();
     event.stopPropagation();

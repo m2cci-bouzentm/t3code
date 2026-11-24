@@ -1,6 +1,5 @@
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
-
-import type { SidebarThreadSummary } from "../types";
+import type { EnvironmentThreadShell } from "./shell.ts";
+import { effectiveSnoozed } from "./threadSettled.ts";
 
 export type ThreadStage = "archived" | "snoozed" | "settled" | "backlog" | "ready" | "open";
 
@@ -10,7 +9,7 @@ export type ThreadStage = "archived" | "snoozed" | "settled" | "backlog" | "read
  * back to its stage when it wakes. Every thread has exactly one stage.
  */
 export function resolveThreadStage(
-  thread: Pick<SidebarThreadSummary, "archivedAt" | "settledOverride"> &
+  thread: Pick<EnvironmentThreadShell, "archivedAt" | "settledOverride"> &
     Parameters<typeof effectiveSnoozed>[0],
   options: { readonly now: string },
 ): ThreadStage {

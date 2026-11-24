@@ -429,6 +429,7 @@ class T3WorkspaceNavigationView(
     "pullRequests" -> "Pulls"
     "issues" -> "Issues"
     "workflows" -> "Workflows"
+    "board" -> "Board"
     "usage" -> "Usage"
     else -> "Settings"
   }
@@ -443,6 +444,7 @@ class T3WorkspaceNavigationView(
       "pullRequests" -> R.drawable.t3_pull_requests
       "issues" -> R.drawable.t3_issues
       "workflows" -> R.drawable.t3_workflows
+      "board" -> R.drawable.t3_board
       "usage" -> R.drawable.t3_usage
       else -> R.drawable.t3_settings
     }

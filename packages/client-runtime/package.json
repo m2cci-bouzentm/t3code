@@ -475,6 +475,14 @@
       "types": "./src/state/threadSettled.ts",
       "default": "./src/state/threadSettled.ts"
     },
+    "./state/thread-stage": {
+      "types": "./src/state/threadStage.ts",
+      "default": "./src/state/threadStage.ts"
+    },
+    "./state/thread-board": {
+      "types": "./src/state/threadBoard.ts",
+      "default": "./src/state/threadBoard.ts"
+    },
     "./state/thread-search": {
       "types": "./src/state/threadSearch.ts",
       "default": "./src/state/threadSearch.ts"

@@ -41,7 +41,7 @@ import {
   type ThreadSortInput,
 } from "@t3tools/client-runtime/state/thread-sort";
 import type { SidebarThreadSummary, Thread } from "../types";
-import { resolveThreadStage } from "./threadStage";
+import { resolveThreadStage } from "@t3tools/client-runtime/state/thread-stage";
 import { normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
 import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";

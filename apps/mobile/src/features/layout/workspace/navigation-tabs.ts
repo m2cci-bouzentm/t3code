@@ -28,6 +28,7 @@ export const WORKSPACE_TAB_LABELS = {
 
 export const NAVIGATION_TAB_ICONS = {
   threads: "text.bubble",
+  board: "square.split.2x1",
   pullRequests: PullRequestGlyph.pullRequest,
   issues: "git.issue",
   workflows: "point.3.connected.trianglepath.dotted",

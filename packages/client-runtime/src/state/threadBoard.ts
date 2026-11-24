@@ -1,10 +1,11 @@
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
-import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
-
-import type { SidebarThreadSummary } from "../../types";
-import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "../Sidebar.logic";
-import { resolveThreadStage } from "../threadStage";
+import { scopeThreadRef, scopedThreadKey } from "../environment/scoped.ts";
+import type { ArchivedSnapshotEntry } from "./archivedThreads.ts";
+import { presentThreadShell } from "./models.ts";
+import type { EnvironmentThreadShell } from "./shell.ts";
+import { isShownUnderParent } from "./threadShell.ts";
+import { effectiveSnoozed } from "./threadSettled.ts";
+import { planPinnedReorder } from "./threadSort.ts";
+import { resolveThreadStage } from "./threadStage.ts";
 
 export const THREAD_BOARD_COLUMNS = [
   "backlog",
@@ -38,7 +39,8 @@ const ORDERED_COLUMNS: ReadonlySet<ThreadBoardColumn> = new Set([
   "needs-you",
 ]);
 
-const NEEDS_YOU_STATUSES: ReadonlySet<SidebarThreadStatus> = new Set([
+/** The statuses of a thread that waits on its owner; web and mobile name them alike. */
+const NEEDS_YOU_STATUSES: ReadonlySet<string> = new Set([
   "approval",
   "input",
   "request",
@@ -54,7 +56,13 @@ export type ThreadBoardStep =
   | "stage-backlog"
   | "stage-ready";
 
-export type ThreadBoardThread = SidebarThreadSummary;
+export type ThreadBoardThread = EnvironmentThreadShell;
+
+export interface ThreadBoardOptions {
+  readonly now: string;
+  /** The client's status of a thread, the one its thread list shows. */
+  readonly status: (thread: ThreadBoardThread) => string;
+}
 
 export interface ThreadBoardOrderAssignment {
   readonly thread: ThreadBoardThread;
@@ -65,14 +73,39 @@ function threadBoardKey(thread: ThreadBoardThread): string {
   return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
 }
 
+/**
+ * The threads of the board: the live ones and the archived ones a live copy does not cover,
+ * without the threads that show under their parent, like the thread lists.
+ */
+export function listThreadBoardThreads(input: {
+  readonly liveThreads: readonly ThreadBoardThread[];
+  readonly archivedSnapshots: readonly ArchivedSnapshotEntry[];
+  readonly delegatedUnderParent: ReadonlySet<string>;
+}): ThreadBoardThread[] {
+  const liveThreadKeys = new Set(input.liveThreads.map(threadBoardKey));
+  const archivedThreads = input.archivedSnapshots
+    .flatMap(({ environmentId, snapshot }) =>
+      snapshot.threads.map((thread) => presentThreadShell(environmentId, thread)),
+    )
+    .filter((thread) => !liveThreadKeys.has(threadBoardKey(thread)));
+  return [...input.liveThreads, ...archivedThreads].filter(
+    (thread) =>
+      !isShownUnderParent(
+        scopeThreadRef(thread.environmentId, thread.id),
+        thread.lineage,
+        input.delegatedUnderParent,
+      ),
+  );
+}
+
 /** Every thread has exactly one column: its stage, and an open thread is Active or Needs You. */
 export function resolveThreadBoardColumn(
   thread: ThreadBoardThread,
-  options: { readonly now: string },
+  options: ThreadBoardOptions,
 ): ThreadBoardColumn {
   const stage = resolveThreadStage(thread, options);
   if (stage !== "open") return stage;
-  if (NEEDS_YOU_STATUSES.has(resolveSidebarThreadStatus(thread))) return "needs-you";
+  if (NEEDS_YOU_STATUSES.has(options.status(thread))) return "needs-you";
   return "active";
 }
 
@@ -93,7 +126,7 @@ function compareByOrderKey(left: ThreadBoardThread, right: ThreadBoardThread): n
 
 export function groupThreadsByBoardColumn(
   threads: readonly ThreadBoardThread[],
-  options: { readonly now: string },
+  options: ThreadBoardOptions,
 ): Record<ThreadBoardColumn, ThreadBoardThread[]> {
   const columns: Record<ThreadBoardColumn, ThreadBoardThread[]> = {
     backlog: [],
@@ -192,7 +225,7 @@ function stepsToColumn(
 export function planThreadBoardMove(
   thread: ThreadBoardThread,
   to: ThreadBoardColumn,
-  options: { readonly now: string },
+  options: ThreadBoardOptions,
 ): ThreadBoardStep[] {
   const from = resolveThreadBoardColumn(thread, options);
   if (from === to) return [];

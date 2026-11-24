@@ -1,7 +1,4 @@
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { describe, expect, it } from "vite-plus/test";
-
-import { isTicketThread, resolveSidebarThreadSection } from "../Sidebar.logic";
 
 import {
   groupThreadsByBoardColumn,
@@ -9,9 +6,16 @@ import {
   planThreadBoardOrder,
   resolveThreadBoardColumn,
   type ThreadBoardThread,
-} from "./threadBoard.logic";
+} from "./threadBoard.ts";
 
-const NOW = { now: "2026-11-14T10:00:00.000Z" };
+function statusOf(thread: ThreadBoardThread): string {
+  if (thread.hasPendingApprovals) return "approval";
+  if (thread.hasPendingUserInput) return "input";
+  if (thread.runtime?.lastErrorClass === "usage_limit") return "limited";
+  return "ready";
+}
+
+const NOW = { now: "2026-11-14T10:00:00.000Z", status: statusOf };
 const LATER = "2026-11-14T12:00:00.000Z";
 
 function makeThread(overrides: Partial<ThreadBoardThread> = {}): ThreadBoardThread {
@@ -78,35 +82,6 @@ describe("resolveThreadBoardColumn", () => {
     expect(
       resolveThreadBoardColumn(makeThread({ snoozedUntil: "2026-11-14T09:59:00.000Z" }), NOW),
     ).toBe("active");
-  });
-});
-
-describe("the board and the sidebar", () => {
-  const SECTION_OF_COLUMN = {
-    snoozed: "snoozed",
-    settled: "settled",
-    active: "active",
-    "needs-you": "active",
-  } as const;
-
-  it("give each thread the same place, for each mix of the stored fields", () => {
-    for (const settledOverride of [null, "active", "settled", "backlog", "ready"] as const) {
-      for (const snoozedUntil of [null, LATER]) {
-        for (const hasPendingApprovals of [false, true]) {
-          const thread = makeThread({ settledOverride, snoozedUntil, hasPendingApprovals });
-          const column = resolveThreadBoardColumn(thread, NOW);
-          const isTicketColumn = column === "backlog" || column === "ready";
-          expect(isTicketThread(thread, NOW)).toBe(isTicketColumn);
-          if (isTicketColumn || column === "archived") continue;
-          const section = resolveSidebarThreadSection({
-            snoozed: effectiveSnoozed(thread, NOW),
-            settled: thread.settledOverride === "settled",
-            pinned: false,
-          });
-          expect(section).toBe(SECTION_OF_COLUMN[column]);
-        }
-      }
-    }
   });
 });
 

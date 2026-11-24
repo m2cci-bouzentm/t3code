@@ -826,16 +826,14 @@ export function useThreadListActions(): {
 export function useArchivedThreadListActions(
   onCompleted: (thread: EnvironmentThreadShell) => void,
 ): {
-  readonly unarchiveThread: (thread: EnvironmentThreadShell) => void;
+  readonly unarchiveThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly confirmDeleteThread: (thread: EnvironmentThreadShell) => void;
 } {
   const handleCompleted = (_action: ThreadListAction, thread: EnvironmentThreadShell) => {
     onCompleted(thread);
   };
   const executeAction = useThreadActionExecutor(handleCompleted);
-  const unarchiveThread = (thread: EnvironmentThreadShell) => {
-    void executeAction("unarchive", thread);
-  };
+  const unarchiveThread = (thread: EnvironmentThreadShell) => executeAction("unarchive", thread);
   const confirmDeleteThread = (thread: EnvironmentThreadShell) =>
     confirmThreadDeletion(executeAction, thread);
 

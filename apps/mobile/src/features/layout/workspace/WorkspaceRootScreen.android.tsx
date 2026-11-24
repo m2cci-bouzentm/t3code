@@ -98,7 +98,7 @@ function WorkspaceRoot() {
                 renderTab={(tab) =>
                   tab === "threads" ? (
                     <HomeRouteScreen />
-                  ) : tab === "usage" || tab === "workflows" ? (
+                  ) : tab === "usage" || tab === "workflows" || tab === "board" ? (
                     <WorkspacePageFrame width={workspacePageWidth ?? null}>
                       <WorkspaceExtraTab tab={tab} />
                     </WorkspacePageFrame>

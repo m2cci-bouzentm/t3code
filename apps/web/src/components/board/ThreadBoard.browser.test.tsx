@@ -9,7 +9,7 @@ import {
   type BoardFilters,
   type BoardProject,
 } from "./ThreadBoard";
-import type { ThreadBoardThread } from "./threadBoard.logic";
+import type { ThreadBoardThread } from "@t3tools/client-runtime/state/thread-board";
 
 const NOW = "2026-11-14T10:00:00.000Z";
 

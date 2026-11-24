@@ -1,12 +1,10 @@
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { presentThreadShell } from "@t3tools/client-runtime/state/models";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   settlePromise,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId, ThreadTicketStage } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
@@ -31,17 +29,19 @@ import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
 import { requestCustomSnooze } from "../CustomSnoozeDialog";
+import { resolveSidebarThreadStatus } from "../Sidebar.logic";
 import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { DEFAULT_BOARD_FILTERS, ThreadBoard, type BoardProject } from "./ThreadBoard";
 import {
+  listThreadBoardThreads,
   planThreadBoardMove,
   THREAD_BOARD_COLUMN_LABELS,
   type ThreadBoardColumn,
   type ThreadBoardOrderAssignment,
   type ThreadBoardStep,
   type ThreadBoardThread,
-} from "./threadBoard.logic";
+} from "@t3tools/client-runtime/state/thread-board";
 
 type BoardCommandResult = AtomCommandResult<unknown, unknown>;
 type BoardCommandFailure = Extract<BoardCommandResult, { readonly _tag: "Failure" }>;
@@ -98,25 +98,11 @@ export function ThreadBoardPage() {
     ...new Set(environmentProjects.map((project) => project.environmentId)),
   ];
   const { snapshots: archivedSnapshots } = useArchivedThreadSnapshots(environmentIds);
-  const liveThreadKeys = new Set(
-    liveThreads.map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-  );
-  const archivedThreads = archivedSnapshots
-    .flatMap(({ environmentId, snapshot }) =>
-      snapshot.threads.map((thread) => presentThreadShell(environmentId, thread)),
-    )
-    .filter(
-      (thread) =>
-        !liveThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-    );
-  const listedThreads = [...liveThreads, ...archivedThreads].filter(
-    (thread) =>
-      !isShownUnderParent(
-        scopeThreadRef(thread.environmentId, thread.id),
-        thread.lineage,
-        delegatedUnderParent,
-      ),
-  );
+  const listedThreads = listThreadBoardThreads({
+    liveThreads,
+    archivedSnapshots,
+    delegatedUnderParent,
+  });
 
   const runStep = (step: ThreadBoardStep, thread: ThreadBoardThread) => {
     const target = scopeThreadRef(thread.environmentId, thread.id);
@@ -158,7 +144,7 @@ export function ThreadBoardPage() {
     to: ThreadBoardColumn,
     order: readonly ThreadBoardOrderAssignment[],
   ) => {
-    const steps = planThreadBoardMove(thread, to, { now });
+    const steps = planThreadBoardMove(thread, to, { now, status: resolveSidebarThreadStatus });
     if (steps.includes("archive")) {
       const confirmed = await isArchiveConfirmed(thread);
       if (!confirmed) return;
