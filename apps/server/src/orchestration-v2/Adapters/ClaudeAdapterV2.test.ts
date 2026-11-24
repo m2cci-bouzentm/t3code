@@ -474,9 +474,33 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     assert.isUndefined(ttl(env, null));
     assert.isUndefined(ttl(env, "fork"));
     assert.equal(ttl({ ...env, CLAUDE_CODE_PROMPT_CACHE_TTL: "1h" }, "subagent"), "1h");
-    assert.strictEqual(
-      ClaudeAdapterV2.claudeQueryEnvironment(env, lineage("subagent"), undefined),
-      env,
+    assert.isUndefined(
+      ClaudeAdapterV2.claudeQueryEnvironment(env, lineage("subagent"), undefined)
+        .CLAUDE_CODE_PROMPT_CACHE_TTL,
+    );
+  });
+
+  it("keeps a delegated child out of claude-mem while the parent thread records", () => {
+    const appThread = (relationshipToParent: "fork" | "subagent" | null) => ({
+      lineage: {
+        parentThreadId: null,
+        relationshipToParent,
+        rootThreadId: ThreadId.make("thread-root"),
+      },
+    });
+    const env = { PATH: "/bin" };
+    const child = ClaudeAdapterV2.claudeQueryEnvironment(env, appThread("subagent"), undefined);
+    assert.equal(child.CLAUDE_MEM_DISABLE_OBSERVATION, "1");
+    assert.equal(child.CLAUDE_MEM_DISABLE_SUMMARY, "1");
+    assert.strictEqual(ClaudeAdapterV2.claudeQueryEnvironment(env, appThread(null), undefined), env);
+    assert.strictEqual(ClaudeAdapterV2.claudeQueryEnvironment(env, appThread("fork"), undefined), env);
+    assert.equal(
+      ClaudeAdapterV2.claudeQueryEnvironment(
+        { ...env, CLAUDE_MEM_DISABLE_OBSERVATION: "0" },
+        appThread("subagent"),
+        undefined,
+      ).CLAUDE_MEM_DISABLE_OBSERVATION,
+      "0",
     );
   });
 

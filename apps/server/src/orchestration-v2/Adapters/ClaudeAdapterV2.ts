@@ -2378,6 +2378,13 @@ function claudeLiveSelectionFlagSettings(
   };
 }
 
+// claude-mem keeps memory of the parent thread only: a delegated child records no tool calls and no
+// end-of-session summary, while it still reads the memory at start.
+const CLAUDE_MEM_CHILD_ENVIRONMENT = {
+  CLAUDE_MEM_DISABLE_OBSERVATION: "1",
+  CLAUDE_MEM_DISABLE_SUMMARY: "1",
+};
+
 // A delegated child is its own SDK session, so Claude Code gives it the main-conversation cache
 // TTL. When the user sets Claude's subagentPromptCacheTtl, the child follows it like a native
 // subagent would. A resumed session's first request otherwise goes out before its MCP servers
@@ -2388,17 +2395,19 @@ export function claudeQueryEnvironment(
   subagentPromptCacheTtl: "5m" | "1h" | undefined,
   resume = false,
 ): NodeJS.ProcessEnv {
+  const isDelegatedChild = appThread.lineage.relationshipToParent === "subagent";
   const promptCacheTtl =
-    appThread.lineage.relationshipToParent === "subagent" &&
+    isDelegatedChild &&
     subagentPromptCacheTtl !== undefined &&
     environment.CLAUDE_CODE_PROMPT_CACHE_TTL === undefined
       ? subagentPromptCacheTtl
       : undefined;
   const blockingMcpConnect = resume && environment.MCP_CONNECTION_NONBLOCKING === undefined;
-  if (promptCacheTtl === undefined && !blockingMcpConnect) {
+  if (!isDelegatedChild && promptCacheTtl === undefined && !blockingMcpConnect) {
     return environment;
   }
   return {
+    ...(isDelegatedChild ? CLAUDE_MEM_CHILD_ENVIRONMENT : {}),
     ...environment,
     ...(promptCacheTtl === undefined ? {} : { CLAUDE_CODE_PROMPT_CACHE_TTL: promptCacheTtl }),
     ...(blockingMcpConnect ? { MCP_CONNECTION_NONBLOCKING: "0" } : {}),
