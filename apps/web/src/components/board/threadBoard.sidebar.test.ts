@@ -1,15 +1,12 @@
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import { isTicketThread } from "@t3tools/client-runtime/state/thread-stage";
 import {
   resolveThreadBoardColumn,
   type ThreadBoardThread,
 } from "@t3tools/client-runtime/state/thread-board";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  isTicketThread,
-  resolveSidebarThreadSection,
-  resolveSidebarThreadStatus,
-} from "../Sidebar.logic";
+import { resolveSidebarThreadSection, resolveSidebarThreadStatus } from "../Sidebar.logic";
 
 const NOW = { now: "2026-11-14T10:00:00.000Z", status: resolveSidebarThreadStatus };
 const LATER = "2026-11-14T12:00:00.000Z";

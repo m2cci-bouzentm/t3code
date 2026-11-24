@@ -20,3 +20,15 @@ export function resolveThreadStage(
   if (thread.settledOverride === "ready") return "ready";
   return "open";
 }
+
+/**
+ * A ticket waits on the board in Backlog or Ready; the list shows it once its first message
+ * makes it active. A snoozed ticket is in Snoozed on the board, so the list shows it too.
+ */
+export function isTicketThread(
+  thread: Parameters<typeof resolveThreadStage>[0],
+  options: { readonly now: string },
+): boolean {
+  const stage = resolveThreadStage(thread, options);
+  return stage === "backlog" || stage === "ready";
+}

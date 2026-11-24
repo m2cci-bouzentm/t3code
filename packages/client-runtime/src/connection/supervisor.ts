@@ -155,6 +155,8 @@ export interface EnvironmentSupervisorOptions {
     readonly activeRoute: ConnectionRoute;
     readonly reported: ReadonlyArray<ReportedEndpoint>;
   }) => Effect.Effect<Option.Option<ConnectionCatalogEntry>>;
+  /** Saves the name the connected server gives itself, so a renamed machine shows its new name. */
+  readonly learnLabel?: (label: string) => Effect.Effect<Option.Option<ConnectionCatalogEntry>>;
 }
 
 function retryDelayMs(failureCount: number, random: number): number {
@@ -372,6 +374,24 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
             yield* Ref.set(currentEntry, updated.value);
             yield* requestBetterRouteCheck(lease);
           }
+        }),
+      ),
+      Effect.ignoreCause({ log: true }),
+    );
+  });
+
+  const learnLabelFrom = Effect.fnUntraced(function* (
+    learn: NonNullable<EnvironmentSupervisorOptions["learnLabel"]>,
+    lease: ConnectedLease,
+  ) {
+    yield* lease.session.subscribeServerConfig().pipe(
+      Stream.filter((event) => event.type === "snapshot"),
+      Stream.map((event) => event.config.environment.label),
+      Stream.changes,
+      Stream.runForEach((label) =>
+        Effect.gen(function* () {
+          const updated = yield* learn(label);
+          if (Option.isSome(updated)) yield* Ref.set(currentEntry, updated.value);
         }),
       ),
       Effect.ignoreCause({ log: true }),
@@ -1082,6 +1102,9 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
     yield* SubscriptionRef.set(session, Option.some(connectedLease.session));
     if (options?.learnRoutes !== undefined) {
       yield* learnRoutesFrom(options.learnRoutes, connectedLease).pipe(Effect.forkScoped);
+    }
+    if (options?.learnLabel !== undefined) {
+      yield* learnLabelFrom(options.learnLabel, connectedLease).pipe(Effect.forkScoped);
     }
     yield* setState({
       desired: true,
