@@ -98,14 +98,14 @@ import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { pullRequestStatus } from "../pull-requests/pullRequestStatus";
 
-interface StatusLabel {
+export interface StatusLabel {
   // Null when the icon and timer carry the status on their own.
   readonly label: string | null;
   readonly icon: AppSymbolName;
   readonly className: string;
   readonly iconTintClassName: string;
 }
-const STATUS_LABEL_BY_STATUS: Partial<Record<ThreadListV2Status, StatusLabel>> = {
+export const STATUS_LABEL_BY_STATUS: Partial<Record<ThreadListV2Status, StatusLabel>> = {
   approval: {
     label: msg("Approval", { $context: "thread status, waiting for approval" }),
     icon: "exclamationmark.shield",
@@ -149,7 +149,7 @@ const STATUS_LABEL_BY_STATUS: Partial<Record<ThreadListV2Status, StatusLabel>> =
     iconTintClassName: "accent-warning-foreground",
   },
 };
-const DONE_STATUS_LABEL: StatusLabel = {
+export const DONE_STATUS_LABEL: StatusLabel = {
   label: msg("Done", { $context: "thread status, turn finished" }),
   icon: "checkmark.circle",
   className: "text-adaptive-emerald-700-300",

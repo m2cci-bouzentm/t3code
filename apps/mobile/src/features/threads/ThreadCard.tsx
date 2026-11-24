@@ -5,8 +5,14 @@ import { Pressable, View } from "react-native";
 
 import { RelativeTime } from "../../components/RelativeTime";
 import { AppText as Text } from "../../components/ui/AppText";
+import { cn } from "../../lib/cn";
 import { ProjectColorBar } from "./ProjectColorBar";
-import { resolveThreadListV2Status, type ThreadListV2Status } from "./threadListV2";
+import { DONE_STATUS_LABEL, STATUS_LABEL_BY_STATUS } from "./thread-list-v2-items";
+import {
+  resolveThreadListV2RowStatus,
+  threadHasUnseenCompletion,
+  type ThreadListV2Status,
+} from "./threadListV2";
 
 const STATUS_LABELS: Record<ThreadListV2Status, string | null> = {
   approval: msg("Needs approval"),
@@ -18,6 +24,19 @@ const STATUS_LABELS: Record<ThreadListV2Status, string | null> = {
   limited: msg("Usage limit"),
   ready: null,
 };
+
+/** The status a card shows, as the thread list row does: Done once a turn finished unseen. */
+function cardStatus(
+  thread: EnvironmentThreadShell,
+): { readonly label: string; readonly className: string } | null {
+  const status = resolveThreadListV2RowStatus(thread);
+  if (status === "ready" && threadHasUnseenCompletion(thread)) {
+    return { label: DONE_STATUS_LABEL.label!, className: DONE_STATUS_LABEL.className };
+  }
+  const label = STATUS_LABELS[status];
+  if (label === null) return null;
+  return { label, className: STATUS_LABEL_BY_STATUS[status]!.className };
+}
 
 function wakeLabel(snoozedUntil: string): string {
   return new Date(snoozedUntil).toLocaleString([], {
@@ -39,7 +58,7 @@ export function ThreadCard(props: {
 }) {
   const m = useMessages();
   const { thread } = props;
-  const statusLabel = STATUS_LABELS[resolveThreadListV2Status(thread)];
+  const status = cardStatus(thread);
   const isSnoozed = effectiveSnoozed(thread, { now: props.now });
   return (
     <Pressable
@@ -52,8 +71,8 @@ export function ThreadCard(props: {
         <Text className="min-w-0 flex-1 text-xs text-foreground-muted" numberOfLines={1}>
           {props.subtitle}
         </Text>
-        {statusLabel === null ? null : (
-          <Text className="font-t3-medium text-xs text-warning-foreground">{m(statusLabel)}</Text>
+        {status === null ? null : (
+          <Text className={cn("font-t3-medium text-xs", status.className)}>{m(status.label)}</Text>
         )}
       </View>
       <Text className="font-t3-medium text-base text-foreground" numberOfLines={2}>
