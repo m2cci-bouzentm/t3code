@@ -45,19 +45,14 @@ import {
   CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
-  CircleDashedIcon,
-  CircleDotDashedIcon,
   ClockIcon,
   FolderGit2Icon,
   GitBranchIcon,
-  MessageCircleQuestionIcon,
   PinIcon,
   PinOffIcon,
-  ShieldQuestionIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
-  UserRoundIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -87,6 +82,7 @@ import { formatRelativeTime, parseTimestampDate } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
+import { resolveThreadTopStatus, TopStatusIcon } from "./threadTopStatus";
 import { textDirection } from "~/textDirection";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import {
@@ -566,22 +562,6 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
   ),
 };
 
-const TOP_STATUS_ICONS = {
-  working: CircleDashedIcon,
-  waiting: CircleDotDashedIcon,
-  input: MessageCircleQuestionIcon,
-  request: UserRoundIcon,
-  approval: ShieldQuestionIcon,
-  failed: CircleAlertIcon,
-  done: CircleCheckIcon,
-  woke: AlarmClockIcon,
-} as const;
-
-function TopStatusIcon(props: { icon: keyof typeof TOP_STATUS_ICONS; className: string }) {
-  const Icon = TOP_STATUS_ICONS[props.icon];
-  return <Icon aria-hidden className={cn("shrink-0", props.className)} />;
-}
-
 type SidebarThreadRowProps = {
   thread: SidebarThreadSummary;
   // "folder" is a one-line row inside a boring sidebar project folder;
@@ -792,67 +772,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isActive: props.isActive,
     isSelected,
   });
-  const topStatus =
-    status === "preparing" || status === "working"
-      ? {
-          label:
-            status === "preparing"
-              ? gt("Setting up")
-              : thread.goal?.status === "active"
-                ? gt("Goal", { $context: "thread status: working on a goal" })
-                : gt("Working", { $context: "thread status" }),
-          icon: "working" as const,
-          className: "text-info-foreground",
-        }
-      : status === "waiting"
-        ? {
-            label: gt("Waiting", { $context: "thread status" }),
-            icon: "waiting" as const,
-            className: "text-muted-foreground",
-          }
-        : status === "approval"
-          ? {
-              label: gt("Approval", { $context: "thread status: needs approval" }),
-              icon: "approval" as const,
-              className: "text-warning-foreground",
-            }
-          : status === "input"
-            ? {
-                label: gt("Input", { $context: "thread status: needs user input" }),
-                icon: "input" as const,
-                className: "text-indigo-600 dark:text-indigo-300",
-              }
-            : status === "request"
-              ? {
-                  label: gt("Request", { $context: "thread status: guest request" }),
-                  icon: "request" as const,
-                  className: "text-guest-foreground",
-                }
-              : status === "limited"
-                ? {
-                    label: gt("Limited", { $context: "thread status: usage limited" }),
-                    icon: "failed" as const,
-                    className: "text-warning-foreground",
-                  }
-                : status === "failed"
-                  ? {
-                      label: gt("Failed", { $context: "thread status" }),
-                      icon: "failed" as const,
-                      className: "text-error-foreground",
-                    }
-                  : isWoke
-                    ? {
-                        label: gt("Woke", { $context: "thread status: woke from snooze" }),
-                        icon: "woke" as const,
-                        className: "text-warning-foreground",
-                      }
-                    : isUnread
-                      ? {
-                          label: gt("Done", { $context: "thread status" }),
-                          icon: "done" as const,
-                          className: "text-success-foreground",
-                        }
-                      : null;
+  const topStatus = resolveThreadTopStatus(
+    { status, goalActive: thread.goal?.status === "active", isWoke, isUnread },
+    gt,
+  );
   const isWokeStatus = topStatus?.icon === "woke";
 
   const branchMismatch = resolveLocalCheckoutBranchMismatch({

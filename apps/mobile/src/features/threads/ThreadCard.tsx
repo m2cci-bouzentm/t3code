@@ -4,10 +4,15 @@ import { msg, useMessages } from "gt-react-native";
 import { Pressable, View } from "react-native";
 
 import { RelativeTime } from "../../components/RelativeTime";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 import { ProjectColorBar } from "./ProjectColorBar";
-import { DONE_STATUS_LABEL, STATUS_LABEL_BY_STATUS } from "./thread-list-v2-items";
+import {
+  DONE_STATUS_LABEL,
+  STATUS_LABEL_BY_STATUS,
+  type StatusLabel,
+} from "./thread-list-v2-items";
 import {
   resolveThreadListV2RowStatus,
   threadHasUnseenCompletion,
@@ -28,14 +33,14 @@ const STATUS_LABELS: Record<ThreadListV2Status, string | null> = {
 /** The status a card shows, as the thread list row does: Done once a turn finished unseen. */
 function cardStatus(
   thread: EnvironmentThreadShell,
-): { readonly label: string; readonly className: string } | null {
+): (StatusLabel & { readonly label: string }) | null {
   const status = resolveThreadListV2RowStatus(thread);
   if (status === "ready" && threadHasUnseenCompletion(thread)) {
-    return { label: DONE_STATUS_LABEL.label!, className: DONE_STATUS_LABEL.className };
+    return { ...DONE_STATUS_LABEL, label: DONE_STATUS_LABEL.label! };
   }
   const label = STATUS_LABELS[status];
   if (label === null) return null;
-  return { label, className: STATUS_LABEL_BY_STATUS[status]!.className };
+  return { ...STATUS_LABEL_BY_STATUS[status]!, label };
 }
 
 function wakeLabel(snoozedUntil: string): string {
@@ -72,7 +77,16 @@ export function ThreadCard(props: {
           {props.subtitle}
         </Text>
         {status === null ? null : (
-          <Text className={cn("font-t3-medium text-xs", status.className)}>{m(status.label)}</Text>
+          <View className="flex-row items-center gap-1">
+            <SymbolView
+              name={status.icon}
+              size={12}
+              tintColorClassName={status.iconTintClassName}
+            />
+            <Text className={cn("font-t3-medium text-xs", status.className)}>
+              {m(status.label)}
+            </Text>
+          </View>
         )}
       </View>
       <Text className="font-t3-medium text-base text-foreground" numberOfLines={2}>

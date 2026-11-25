@@ -8,7 +8,21 @@ import { cn } from "../../lib/utils";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { resolveSidebarThreadStatus, resolveThreadStatusPill } from "../Sidebar.logic";
+import {
+  hasUnseenCompletion,
+  resolveSidebarRowStatus,
+  resolveSidebarThreadStatus,
+  resolveThreadLastVisitedAt,
+} from "../Sidebar.logic";
+import { resolveThreadTopStatus, TopStatusIcon } from "../sidebar/threadTopStatus";
+import {
+  projectColorsByEnvironment,
+  resolveThreadProjectColor,
+} from "@t3tools/client-runtime/state/project-colors";
+import { useGT } from "gt-react";
+import { projectColorBarClassName } from "../../projectIconColors";
+import { useServerConfigs } from "../../state/entities";
+import { useUiStateStore } from "../../uiStateStore";
 import { snoozeWakeLabel, type SnoozePreset } from "../Sidebar.snooze";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -215,7 +229,27 @@ function ThreadBoardCard(props: {
   onDragEnd: () => void;
 }) {
   const { thread, column, project } = props;
-  const pill = resolveThreadStatusPill({ thread });
+  const gt = useGT();
+  const localLastVisitedAt = useUiStateStore(
+    (state) =>
+      state.threadLastVisitedAtById[
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+      ],
+  );
+  const lastVisitedAt = resolveThreadLastVisitedAt(thread.lastVisitedAt, localLastVisitedAt);
+  const topStatus = resolveThreadTopStatus(
+    {
+      status: resolveSidebarRowStatus({ ...thread, lastVisitedAt }),
+      goalActive: thread.goal?.status === "active",
+      isWoke: false,
+      isUnread: hasUnseenCompletion({ ...thread, lastVisitedAt }),
+    },
+    gt,
+  );
+  const projectColor = resolveThreadProjectColor(
+    thread,
+    projectColorsByEnvironment(useServerConfigs()),
+  );
   const moveTargets = THREAD_BOARD_COLUMNS.filter(
     (target) =>
       planThreadBoardMove(thread, target, {
@@ -238,7 +272,14 @@ function ThreadBoardCard(props: {
       onDragStart={handleDragStart}
       onDragOver={props.onDragOver}
       onDragEnd={props.onDragEnd}
-      className="flex cursor-grab flex-col gap-1.5 rounded-md border bg-card p-2.5 text-sm shadow-xs active:cursor-grabbing"
+      className={cn(
+        "relative flex cursor-grab flex-col gap-1.5 overflow-hidden rounded-md border bg-card p-2.5 text-sm shadow-xs active:cursor-grabbing",
+        projectColor !== null &&
+          cn(
+            "ps-3.5 before:pointer-events-none before:absolute before:inset-y-1.5 before:left-1 before:w-[3px] before:rounded-full before:content-['']",
+            projectColorBarClassName(projectColor),
+          ),
+      )}
       data-testid="thread-board-card"
     >
       <div className="flex items-start gap-1.5">
@@ -286,12 +327,15 @@ function ThreadBoardCard(props: {
             <span className="truncate">{project.displayName}</span>
           </span>
         ) : null}
-        {pill ? (
-          <span className={cn("flex shrink-0 items-center gap-1", pill.colorClass)}>
-            <span
-              className={cn("size-1.5 rounded-full", pill.dotClass, pill.pulse && "animate-pulse")}
-            />
-            {pill.label}
+        {topStatus ? (
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 font-medium",
+              topStatus.className,
+            )}
+          >
+            <TopStatusIcon icon={topStatus.icon} className="size-3" />
+            {topStatus.label}
           </span>
         ) : null}
         {column === "snoozed" && thread.snoozedUntil !== null ? (
