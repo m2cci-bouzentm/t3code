@@ -1,4 +1,5 @@
 import type { EnvironmentId, SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { DEFAULT_SIDEBAR_PROJECT_SORT_ORDER } from "@t3tools/contracts";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 import { createContext, createElement, useContext, useState, type PropsWithChildren } from "react";
@@ -6,10 +7,12 @@ import { createContext, createElement, useContext, useState, type PropsWithChild
 import type { ThreadListFilters } from "../../persistence/mobile-preferences";
 import { saveMobilePreferences } from "../../state/preferences";
 import { useAtomCommand } from "../../state/use-atom-command";
+import type { HomeProjectSortOrder } from "./homeThreadList";
 
 export interface HomeListOptions {
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKey: string | null;
+  readonly projectSortOrder: HomeProjectSortOrder;
 }
 
 export interface ResolvedHomeListOptions extends HomeListOptions {
@@ -20,6 +23,10 @@ function defaultHomeListOptions(filters?: ThreadListFilters): HomeListOptions {
   return {
     selectedEnvironmentId: filters?.environmentId ?? null,
     selectedProjectKey: filters?.projectKey ?? null,
+    projectSortOrder:
+      DEFAULT_SIDEBAR_PROJECT_SORT_ORDER === "manual"
+        ? "updated_at"
+        : DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
   };
 }
 
@@ -43,7 +50,7 @@ export function HomeListOptionsProvider({
   const [optionsAtom] = useState(() => Atom.make(defaultHomeListOptions(savedFilters)));
   const options = useAtomValue(optionsAtom);
   const savePreferences = useAtomCommand(saveMobilePreferences);
-  // The scope persists. Updates read the
+  // Only the scope persists; the sort order is per session. Updates read the
   // registry, so several in one event each build on the last and save it.
   const updateOptions = (patch: Partial<HomeListOptions>) => {
     const current = registry.get(optionsAtom);
@@ -92,9 +99,13 @@ export function useHomeListOptions(availableEnvironmentIds: ReadonlySet<Environm
   const setSelectedProjectKey = (value: string | null) => {
     updateOptions({ selectedProjectKey: value });
   };
+  const setProjectSortOrder = (value: HomeProjectSortOrder) => {
+    updateOptions({ projectSortOrder: value });
+  };
   return {
     options: resolvedOptions,
     setSelectedEnvironmentId,
     setSelectedProjectKey,
+    setProjectSortOrder,
   } as const;
 }

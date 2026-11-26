@@ -12,6 +12,7 @@ import {
   getThreadListV2OrderedSection,
   threadListInboxReturns,
   threadListV2LayoutTime,
+  type ThreadListV2ProjectGroup,
 } from "./threadListV2";
 import { computeThreadMoveAvailability } from "./threadOrder";
 
@@ -66,6 +67,9 @@ export function useThreadListV2(input: {
   readonly snoozedShelfExpanded: boolean;
   readonly settledShelfExpanded: boolean;
   readonly selectedThreadKey: string | null;
+  /** Lists active threads under a header per project, in this order. */
+  readonly projectGroups?: ReadonlyArray<ThreadListV2ProjectGroup> | null;
+  readonly collapsedProjectGroupKeys?: ReadonlySet<string>;
 }) {
   const { threads, workingShelfEnabled } = input;
   const layoutTime = useMemo(
@@ -230,6 +234,8 @@ export function useThreadListV2(input: {
         moveAvailability,
         shelfPreferencesLoading: !input.shelfPreferencesLoaded,
         resolve: keepMarked,
+        projectGroups: input.projectGroups,
+        collapsedProjectGroupKeys: input.collapsedProjectGroupKeys,
       }),
     [
       layout,
@@ -242,6 +248,8 @@ export function useThreadListV2(input: {
       input.queuedThreadKeys,
       moveAvailability,
       input.shelfPreferencesLoaded,
+      input.projectGroups,
+      input.collapsedProjectGroupKeys,
     ],
   );
   return { layout, items, contentOnlyThreadKeys, olderSettledShelf };

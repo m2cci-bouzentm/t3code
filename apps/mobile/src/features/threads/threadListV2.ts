@@ -481,12 +481,28 @@ export interface ThreadListV2SettledShelfListItem {
   readonly disabled: boolean;
 }
 
+/** A project of the grouped list: its key and the `environmentId:projectId` keys it covers. */
+export interface ThreadListV2ProjectGroup {
+  readonly key: string;
+  readonly projectKeys: ReadonlySet<string>;
+}
+
+export interface ThreadListV2ProjectHeaderListItem {
+  readonly type: "v2-project-header";
+  readonly key: string;
+  /** The project group, or null for the threads of no listed project. */
+  readonly projectGroupKey: string | null;
+  readonly count: number;
+  readonly collapsed: boolean;
+}
+
 export type ThreadListV2ListItem =
   | ThreadListV2ThreadListItem
   | ThreadListV2PendingListItem
   | ThreadListV2WorkingShelfListItem
   | ThreadListV2SnoozedShelfListItem
-  | ThreadListV2SettledShelfListItem;
+  | ThreadListV2SettledShelfListItem
+  | ThreadListV2ProjectHeaderListItem;
 
 export function isThreadListV2ListItem(value: {
   readonly type: string;
@@ -496,7 +512,8 @@ export function isThreadListV2ListItem(value: {
     value.type === "v2-pending" ||
     value.type === "v2-working-shelf" ||
     value.type === "v2-snoozed-shelf" ||
-    value.type === "v2-settled-shelf"
+    value.type === "v2-settled-shelf" ||
+    value.type === "v2-project-header"
   );
 }
 
@@ -530,6 +547,13 @@ export function threadListV2ListItemsAreEqual(
         previous.pendingTask === item.pendingTask &&
         previous.showPendingDivider === item.showPendingDivider &&
         previous.showTrailingDivider === item.showTrailingDivider
+      );
+    case "v2-project-header":
+      return (
+        previous.type === "v2-project-header" &&
+        previous.key === item.key &&
+        previous.count === item.count &&
+        previous.collapsed === item.collapsed
       );
     case "v2-working-shelf":
       return (
@@ -596,6 +620,8 @@ export function buildThreadListV2ListItems(input: {
   readonly moveAvailability?: ReadonlyMap<string, ThreadMoveAvailability>;
   readonly shelfPreferencesLoading?: boolean;
   readonly resolve?: MessageResolver;
+  readonly projectGroups?: ReadonlyArray<ThreadListV2ProjectGroup> | null;
+  readonly collapsedProjectGroupKeys?: ReadonlySet<string>;
 }): ThreadListV2ListItem[] {
   const resolve = input.resolve ?? m;
   const queuedThreadKeys = input.queuedThreadKeys?.size ? input.queuedThreadKeys : undefined;
@@ -646,7 +672,17 @@ export function buildThreadListV2ListItems(input: {
   const snoozedEnd = settledShelfHeaderIndex ?? threadItems.length;
   const workingEnd = snoozedShelfHeaderIndex ?? snoozedEnd;
   const activeEnd = workingShelfHeaderIndex ?? workingEnd;
-  const result: ThreadListV2ListItem[] = [...pendingItems, ...threadItems.slice(0, activeEnd)];
+  const activeItems = threadItems.slice(0, activeEnd);
+  const result: ThreadListV2ListItem[] = [
+    ...pendingItems,
+    ...(input.projectGroups == null
+      ? activeItems
+      : groupActiveItemsByProject(
+          activeItems,
+          input.projectGroups,
+          input.collapsedProjectGroupKeys ?? new Set(),
+        )),
+  ];
   const shelfDisabled = input.shelfPreferencesLoading === true;
   if (workingShelfHeaderIndex !== null && workingCount > 0) {
     result.push({
@@ -687,6 +723,50 @@ export function buildThreadListV2ListItems(input: {
       ? entry
       : { ...entry, showTrailingDivider };
   });
+}
+
+const NO_PROJECT_GROUP_KEY = "no-project";
+
+/**
+ * The active threads under a header per project, like the desktop sidebar: pinned threads stay
+ * first, then each project in the given order with its threads in list order, then the threads of
+ * no listed project. A collapsed project keeps its header only.
+ */
+function groupActiveItemsByProject(
+  items: ReadonlyArray<ThreadListV2ListItem>,
+  groups: ReadonlyArray<ThreadListV2ProjectGroup>,
+  collapsedKeys: ReadonlySet<string>,
+): ThreadListV2ListItem[] {
+  const leading: ThreadListV2ListItem[] = [];
+  const byGroup = new Map<string, ThreadListV2ListItem[]>();
+  for (const entry of items) {
+    if (entry.type !== "v2-thread" || entry.item.pinned) {
+      leading.push(entry);
+      continue;
+    }
+    const projectKey = `${entry.item.thread.environmentId}:${entry.item.thread.projectId}`;
+    const groupKey =
+      groups.find((group) => group.projectKeys.has(projectKey))?.key ?? NO_PROJECT_GROUP_KEY;
+    byGroup.set(groupKey, [...(byGroup.get(groupKey) ?? []), entry]);
+  }
+  const orderedKeys = [...groups.map((group) => group.key), NO_PROJECT_GROUP_KEY];
+  return [
+    ...leading,
+    ...orderedKeys.flatMap((groupKey): ThreadListV2ListItem[] => {
+      const members = byGroup.get(groupKey);
+      if (members === undefined) return [];
+      const key = `v2-project-header:${groupKey}`;
+      const collapsed = collapsedKeys.has(key);
+      const header: ThreadListV2ProjectHeaderListItem = {
+        type: "v2-project-header",
+        key,
+        projectGroupKey: groupKey === NO_PROJECT_GROUP_KEY ? null : groupKey,
+        count: members.length,
+        collapsed,
+      };
+      return collapsed ? [header] : [header, ...members];
+    }),
+  ];
 }
 
 // Immutable shells and field-only sorting make element-identical inputs produce identical output.

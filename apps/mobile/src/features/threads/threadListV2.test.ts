@@ -950,6 +950,54 @@ describe("buildThreadListV2ListItems", () => {
     });
     expect(threadJumpTarget(items, "thread.jump.4")).toBeNull();
   });
+
+  it("groups active threads under their project's header, pinned first and no project last", () => {
+    const grouped = buildThreadListV2Items({
+      threads: [
+        makeThread({ id: ThreadId.make("b-1"), title: "b-1", projectId: ProjectId.make("b") }),
+        makeThread({ id: ThreadId.make("a-1"), title: "a-1", projectId: ProjectId.make("a") }),
+        makeThread({ id: ThreadId.make("lost"), title: "lost", projectId: ProjectId.make("x") }),
+        makeThread({
+          id: ThreadId.make("pinned"),
+          title: "pinned",
+          projectId: ProjectId.make("b"),
+          pinnedAt: NOW,
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+    const projectGroups = [
+      { key: "project-a", projectKeys: new Set([`${environmentId}:a`]) },
+      { key: "project-b", projectKeys: new Set([`${environmentId}:b`]) },
+    ];
+    const listed = (collapsedProjectGroupKeys: ReadonlySet<string>) =>
+      buildThreadListV2ListItems({
+        items: grouped.items,
+        pendingTasks: [],
+        projectGroups,
+        collapsedProjectGroupKeys,
+      }).map((item) => (item.type === "v2-thread" ? item.item.thread.id : item.key));
+
+    expect(listed(new Set())).toEqual([
+      "pinned",
+      "v2-project-header:project-a",
+      "a-1",
+      "v2-project-header:project-b",
+      "b-1",
+      "v2-project-header:no-project",
+      "lost",
+    ]);
+    expect(listed(new Set(["v2-project-header:project-a"]))).toEqual([
+      "pinned",
+      "v2-project-header:project-a",
+      "v2-project-header:project-b",
+      "b-1",
+      "v2-project-header:no-project",
+      "lost",
+    ]);
+  });
 });
 
 describe("pending mobile thread moves", () => {

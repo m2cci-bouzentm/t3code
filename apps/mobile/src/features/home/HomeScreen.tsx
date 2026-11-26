@@ -88,15 +88,23 @@ import {
   THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
   type ThreadListV2ListItem,
+  type ThreadListV2ProjectGroup,
 } from "../threads/threadListV2";
 import { useThreadListV2ShelfPreferences } from "../threads/use-thread-list-v2-shelf-preferences";
 import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
 import {
   buildHomeProjectScopes,
   findHomeProjectScope,
+  type HomeProjectScope,
+  type HomeProjectSortOrder,
   sortHomeProjectScopes,
 } from "./homeThreadList";
-import { useProjectSortOrder } from "../settings/ThreadListGroupingSection";
+import { ProjectColorSheet } from "./ProjectColorSheet";
+import { ProjectGroupHeader } from "./ProjectGroupHeader";
+import {
+  useGroupThreadsByProject,
+  useProjectSortOrder,
+} from "../settings/ThreadListGroupingSection";
 import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
 import { useFabScroll } from "./FabScrollContext";
@@ -119,6 +127,7 @@ interface HomeScreenProps {
   readonly searchQuery: string;
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKey: string | null;
+  readonly projectSortOrder: HomeProjectSortOrder;
   readonly projectGroupingMode: SidebarProjectGroupingMode;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
@@ -195,7 +204,6 @@ function renderHomeScrollView(props: ScrollViewProps) {
 export function HomeScreen(props: HomeScreenProps) {
   const gt = useGT();
   const m = useMessages();
-  const projectSortOrder = useProjectSortOrder();
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const workspace = useWorkspaceTabs();
   const [initialScrollOffset] = useState(() => workspace?.getScrollOffset("threads") ?? 0);
@@ -334,6 +342,33 @@ export function HomeScreen(props: HomeScreenProps) {
       ),
     [projects, selectedEnvironmentId, projectGroupingMode, m],
   );
+  const groupThreadsByProject = useGroupThreadsByProject();
+  const projectSortOrder = useProjectSortOrder();
+  const { threads: listThreads } = props;
+  const groupedProjectScopes = useMemo(
+    () =>
+      groupThreadsByProject
+        ? sortHomeProjectScopes({
+            scopes: projectScopes,
+            threads: listThreads,
+            pendingTasks: [],
+            projectSortOrder,
+          })
+        : null,
+    [groupThreadsByProject, projectScopes, listThreads, projectSortOrder],
+  );
+  const projectGroups = useMemo(
+    () =>
+      groupedProjectScopes === null
+        ? null
+        : groupedProjectScopes.map((scope): ThreadListV2ProjectGroup => ({
+            key: scope.key,
+            projectKeys: new Set(
+              scope.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`),
+            ),
+          })),
+    [groupedProjectScopes],
+  );
   const hasSearchQuery = props.searchQuery.trim().length > 0;
   const projectByKey = (() => {
     const map = new Map<string, EnvironmentProject>();
@@ -376,6 +411,10 @@ export function HomeScreen(props: HomeScreenProps) {
   const handleRenameThread = props.onRenameThread;
   const handleDeleteThread = props.onDeleteThread;
   const handleUnsettleThread = props.onUnsettleThread;
+  const [collapsedProjectGroupKeys, setCollapsedProjectGroupKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [colorScope, setColorScope] = useState<HomeProjectScope | null>(null);
   const [settledVisibleCount, setSettledVisibleCount] = useState(
     THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   );
@@ -439,6 +478,8 @@ export function HomeScreen(props: HomeScreenProps) {
     snoozedShelfExpanded,
     settledShelfExpanded,
     selectedThreadKey,
+    projectGroups,
+    collapsedProjectGroupKeys,
   });
   // Called as `props.onSelectThread(...)`, the compiler would cache this handler on the whole
   // props object, which is new on every render of Home's parent.
@@ -461,7 +502,30 @@ export function HomeScreen(props: HomeScreenProps) {
     if (swipeEnabled) activateVisibleRows(threadListV2Items);
   }, [activateVisibleRows, swipeEnabled, threadListV2Items]);
 
+  const toggleProjectGroup = (key: string) =>
+    setCollapsedProjectGroupKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   const renderV2Item = ({ item }: { readonly item: ThreadListV2ListItem }) => {
+    if (item.type === "v2-project-header") {
+      const scope =
+        item.projectGroupKey === null
+          ? null
+          : (groupedProjectScopes?.find((entry) => entry.key === item.projectGroupKey) ?? null);
+      return (
+        <ProjectGroupHeader
+          scope={scope}
+          count={item.count}
+          collapsed={item.collapsed}
+          onToggle={() => toggleProjectGroup(item.key)}
+          onLongPress={() => setColorScope(scope)}
+        />
+      );
+    }
     if (item.type === "v2-pending") {
       const pendingScopeKey = scopedProjectKey(
         item.pendingTask.environmentId,
@@ -692,7 +756,7 @@ export function HomeScreen(props: HomeScreenProps) {
               scopes: projectScopes,
               threads: props.threads,
               pendingTasks: [],
-              projectSortOrder,
+              projectSortOrder: "updated_at",
             }),
           ).map((scope) => ({
             key: scope.key,
@@ -836,6 +900,7 @@ export function HomeScreen(props: HomeScreenProps) {
           </SwipeableScrollGateProvider>
         </View>
       </ScreenContent>
+      <ProjectColorSheet scope={colorScope} onClose={() => setColorScope(null)} />
     </View>
   );
 }

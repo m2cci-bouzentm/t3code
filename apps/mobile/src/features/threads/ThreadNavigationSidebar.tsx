@@ -27,10 +27,10 @@ import { Button } from "../../components/ui/Button";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { useProjects } from "../../state/entities";
 import { steadyNavigationThreadShellsAtom } from "../../state/threads";
-import { useListedThreadShells } from "./use-listed-thread-shells";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
 import { useThreadListNow } from "./use-thread-list-now";
+import { useListedThreadShells } from "./use-listed-thread-shells";
 import { usePendingThreadOrder } from "../../state/thread-order";
 import { threadListEnvironmentsAtom } from "../../state/presentation";
 import {
@@ -56,7 +56,6 @@ import {
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "../home/homeThreadList";
-import { useProjectSortOrder } from "../settings/ThreadListGroupingSection";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
 import { useThreadListActions } from "../home/useThreadListActions";
@@ -125,7 +124,6 @@ export function ThreadNavigationSidebar(props: ThreadNavigationSidebarProps) {
 function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   const gt = useGT();
   const messages = useMessages();
-  const projectSortOrder = useProjectSortOrder();
   const floatingTabsEnabled = useAndroidFloatingTabs();
   const { themeVariables: materialTheme } = useAppearancePreferences();
   const drawerColor = materialTheme["--color-drawer"];
@@ -196,7 +194,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
       scopes: projectScopes,
       threads,
       pendingTasks: [],
-      projectSortOrder,
+      projectSortOrder: "updated_at",
     }),
   ).map((scope) => ({
     key: scope.key,
